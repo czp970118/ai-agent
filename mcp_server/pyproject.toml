@@ -1,0 +1,21 @@
+[tool.uv]
+# 国内加速：PyPI 默认源（安装 httpx、mcp、playwright 等 wheel 会快很多）
+[[tool.uv.index]]
+name = "tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[project]
+name = "mcp-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.26.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "playwright>=1.49.0",
+    "fastapi-cli>=0.0.24",
+]
