@@ -1,0 +1,22 @@
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Environment and secrets
+.env
+*.env
+
+# Build/cache artifacts
+.next/
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log

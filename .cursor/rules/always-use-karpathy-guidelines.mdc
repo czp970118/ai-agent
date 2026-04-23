@@ -1,0 +1,13 @@
+---
+description: Always apply Karpathy guidelines before execution
+alwaysApply: true
+---
+
+# Always Use Karpathy Guidelines
+
+Before any planning, coding, file edit, or command execution:
+- Read and follow `.cursor/skills/andrej-karpathy-guidelines/SKILL.md`.
+- Use minimum necessary changes only.
+- Keep solutions simple and avoid speculative implementation.
+- If requirements are ambiguous, clarify before implementing.
+- Verify outcomes against clear success criteria.

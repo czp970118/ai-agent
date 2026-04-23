@@ -1,0 +1,10 @@
+{
+  "venvPath": "mcp_server",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "mcp_server",
+      "pythonVersion": "3.12"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "ai-agent-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bash ./scripts/dev-in-separate-terminals.sh",
+    "dev:combined": "concurrently -n next,mcp,n8n -c cyan,magenta,yellow \"npm run dev --prefix next-project\" \"uv run --directory mcp_server python -m uvicorn main:http_app --host 127.0.0.1 --port 8000\" \"npm run start --prefix n8n-local\"",
+    "dev:next": "npm run dev --prefix next-project",
+    "dev:mcp": "uv run --directory mcp_server python -m uvicorn main:http_app --host 127.0.0.1 --port 8000",
+    "dev:n8n": "npm run start --prefix n8n-local"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
