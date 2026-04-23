@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ai-agent
 
-## Getting Started
+当前仓库已同步两套能力：
+- `next-project` 风格的 Next.js 前端（根目录 `app/`、`app/api/assistant` 等）
+- `mcp_server` 风格的 Python 网关（根目录 `main.py`、`server/`、`integrations/` 等）
 
-First, run the development server:
+## 前端（Next.js）
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+默认启动后访问 [http://localhost:3000](http://localhost:3000)。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 后端（Python / FastAPI）
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+uv sync
+python main.py --host 127.0.0.1 --port 8000
+```
 
-## Learn More
+或使用 uvicorn：
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+python -m uvicorn main:http_app --host 127.0.0.1 --port 8000
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 核心接口
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `POST /chat/stream`：SSE 流式聊天输出
+- `POST /search/poll`：搜索与结果轮询
 
-## Deploy on Vercel
+## 环境变量
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+参考 `.env.example`，重点变量：
+- `DEEPSEEK_API_KEY`
+- `DEEPSEEK_MODEL`
+- `N8N_PREPROCESS_WEBHOOK_URL`
+- `N8N_POSTPROCESS_WEBHOOK_URL`

@@ -39,3 +39,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local env secrets
+.env
+.env.local
+
+# Playwright storage state (do not commit)
+server/xhs/xhs_storage_state.json
+server/qcc/qcc_storage_state.json
