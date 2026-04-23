@@ -142,9 +142,10 @@ export function isLikelyHtmlFragment(s: string): boolean {
 type Props = {
   role: "user" | "assistant";
   content: string;
+  isStreaming?: boolean;
 };
 
-export default function MessageContent({ role, content }: Props) {
+export default function MessageContent({ role, content, isStreaming = false }: Props) {
   if (role === "user") {
     return (
       <p className="text-sm whitespace-pre-wrap break-words">{content}</p>
@@ -155,7 +156,7 @@ export default function MessageContent({ role, content }: Props) {
     const safe = DOMPurify.sanitize(content, { USE_PROFILES: { html: true } });
     return (
       <div
-        className={htmlRichClass}
+        className={`${htmlRichClass} ${isStreaming ? "thinking-shimmer" : ""}`}
         // 已由 DOMPurify 消毒；内容来自自建 n8n 工作流
         dangerouslySetInnerHTML={{ __html: safe }}
       />
@@ -163,7 +164,7 @@ export default function MessageContent({ role, content }: Props) {
   }
 
   return (
-    <div className={richWrapper}>
+    <div className={`${richWrapper} ${isStreaming ? "thinking-shimmer" : ""}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
         {content}
       </ReactMarkdown>

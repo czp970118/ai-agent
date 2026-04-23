@@ -231,7 +231,9 @@ def _build_xhs_generation_context(
                 continue
             note_samples.append(
                 {
+                    "note_id": row.get("note_id"),
                     "title": row.get("title"),
+                    "url": row.get("note_url") or row.get("url"),
                     "content_text": row.get("content_text"),
                     "like_count": row.get("like_count"),
                     "collect_count": row.get("collect_count"),
@@ -247,8 +249,49 @@ def _build_xhs_generation_context(
         f"用户原始需求:\n{user_input}\n\n"
         f"参数规划结果:\n{json.dumps(planned, ensure_ascii=False)}\n\n"
         f"热贴数据(精简JSON):\n{json.dumps(compact, ensure_ascii=False)}\n\n"
-        "请基于这些输入生成最终可发布的小红书内容。"
+        "请基于这些输入生成最终可发布的小红书内容。\n"
+        "直接输出正文内容（Markdown/纯文本都可），不要输出 JSON、不要输出代码块、不要解释你的思考过程。"
     )
+
+
+def _extract_xhs_references_and_meta(
+    search_payload: dict[str, Any], planned: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    notes = search_payload.get("notes")
+    references: list[dict[str, str]] = []
+    query_terms: list[str] = []
+    planned_topic = planned.get("topic") if isinstance(planned, dict) else None
+    topic_term = str(planned_topic or "").strip()
+    if topic_term:
+        query_terms.append(topic_term)
+    planned_requirements = planned.get("requirements") if isinstance(planned, dict) else None
+    if isinstance(planned_requirements, list):
+        for req in planned_requirements:
+            term = str(req or "").strip()
+            if term and term not in query_terms:
+                query_terms.append(term)
+    if isinstance(notes, list):
+        for row in notes:
+            if not isinstance(row, dict):
+                continue
+            if not query_terms:
+                q = str(row.get("query") or "").strip()
+                if q and q not in query_terms:
+                    query_terms.append(q)
+            title = str(row.get("title") or "").strip()
+            url = str(row.get("note_url") or row.get("url") or "").strip()
+            if not url:
+                continue
+            references.append({"title": title or url, "url": url})
+            if len(references) >= 8:
+                break
+    return {
+        "references": references,
+        "search_meta": {
+            "query_count": len(query_terms),
+            "query_terms": query_terms,
+        },
+    }
 
 
 @chat_router.post("/stream")
@@ -271,6 +314,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
     async def event_stream():
+        xhs_display_meta: dict[str, Any] | None = None
         preprocess = await _call_optional_webhook(
             preprocess_url,
             {"agent": body.agent, "messages": [m.model_dump() for m in body.messages], "workflow": body.workflow},
@@ -347,6 +391,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 yield _sse("error", {"error": "热贴数据获取失败", "detail": search_payload})
                 yield _sse("end", {"ok": False})
                 return
+            xhs_display_meta = _extract_xhs_references_and_meta(search_payload, planned)
             yield _sse(
                 "stage",
                 {
@@ -413,18 +458,27 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
             return
 
         final_text = "".join(full_text_parts)
+        end_payload: dict[str, Any] = {"ok": True, "content": final_text}
         if (body.agent or "").strip() == "xiaohongshu":
+            xhs_meta = xhs_display_meta or {"references": [], "search_meta": {"query_count": 0, "query_terms": []}}
+            end_payload = {
+                "ok": True,
+                "content": final_text,
+                "references": xhs_meta.get("references") or [],
+                "search_meta": xhs_meta.get("search_meta") or {"query_count": 0, "query_terms": []},
+            }
             logger.info(
                 "xhs_generation_result=%s",
                 json.dumps(
                     {
                         "length": len(final_text),
                         "preview": final_text[:600],
+                        "references_count": len(end_payload.get("references", [])),
                     },
                     ensure_ascii=False,
                 ),
             )
-        yield _sse("end", {"ok": True, "content": final_text})
+        yield _sse("end", end_payload)
 
         if postprocess_url:
             asyncio.create_task(

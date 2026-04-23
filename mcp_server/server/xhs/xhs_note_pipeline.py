@@ -25,9 +25,9 @@ def _keyword_output_path(keyword: str) -> str:
     safe = safe.strip("._")
     if not safe:
         safe = "keyword"
-    out_dir = Path("json")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    return str(out_dir / f"xhs_search_{safe}.json")
+    json_dir = Path(__file__).resolve().parents[2] / "json"
+    json_dir.mkdir(parents=True, exist_ok=True)
+    return str(json_dir / f"xhs_search_{safe}.json")
 
 
 def _flatten_wb_dft_image_urls(image_list: Any) -> list[str]:
@@ -56,6 +56,22 @@ def _flatten_wb_dft_image_urls(image_list: Any) -> list[str]:
     return urls
 
 
+def _extract_raw_image_list(item: Any) -> list[dict[str, Any]]:
+    """优先返回原始 image_list（对象数组），避免误变成空列表。"""
+    if not isinstance(item, dict):
+        return []
+    note_card = item.get("note_card") if isinstance(item.get("note_card"), dict) else {}
+    candidates = [item.get("image_list"), note_card.get("image_list")]
+    for candidate in candidates:
+        if isinstance(candidate, list) and all(isinstance(x, dict) for x in candidate):
+            return candidate
+    return []
+
+
+def _extract_wb_dft_urls(item: Any) -> list[str]:
+    return _flatten_wb_dft_image_urls(_extract_raw_image_list(item))
+
+
 def _extract_note_targets(search_payload: dict[str, Any]) -> list[dict[str, Any]]:
     data = search_payload.get("data") if isinstance(search_payload, dict) else None
     items = data.get("items") if isinstance(data, dict) else None
@@ -75,7 +91,7 @@ def _extract_note_targets(search_payload: dict[str, Any]) -> list[dict[str, Any]
         note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
         note_card = item.get("note_card") if isinstance(item.get("note_card"), dict) else {}
         title = str(note_card.get("display_title") or "")
-        image_list = _flatten_wb_dft_image_urls(note_card.get("image_list"))
+        image_list = _extract_wb_dft_urls(item)
         user = note_card.get("user") if isinstance(note_card.get("user"), dict) else {}
         out.append(
             {
@@ -131,8 +147,10 @@ async def _poll_note_details_concurrently(
                             failed = True
 
                     if not failed:
+                        previous_images = note.get("image_list") if isinstance(note.get("image_list"), list) else []
                         note.update(detail_data)
-                        note["image_list"] = _flatten_wb_dft_image_urls(note.get("image_list"))
+                        merged_images = _flatten_wb_dft_image_urls(note.get("image_list"))
+                        note["image_list"] = merged_images or previous_images
                         return
 
                     # 简单退避重试：每次失败后等待更久并叠加随机抖动。
@@ -142,12 +160,14 @@ async def _poll_note_details_concurrently(
                         continue
 
                     # 最后一次仍失败，保留失败信息，避免整批中断。
+                    previous_images = note.get("image_list") if isinstance(note.get("image_list"), list) else []
                     note.update(
                         detail_data
                         if isinstance(detail_data, dict)
                         else {"raw_text": detail_text}
                     )
-                    note["image_list"] = _flatten_wb_dft_image_urls(note.get("image_list"))
+                    merged_images = _flatten_wb_dft_image_urls(note.get("image_list"))
+                    note["image_list"] = merged_images or previous_images
                     return
 
         await asyncio.gather(*[_fetch_and_merge(note) for note in notes])
@@ -273,9 +293,12 @@ async def poll_details_from_search_result(
     poll_count: int = 3,
     interval_seconds: float = 2.0,
     timeout_seconds: float = 30.0,
-    output_path: str = "json/xhs_search_details_poll.json",
+    output_path: str | None = None,
 ) -> str:
     """基于已有 search JSON（如 xhs_search3.json）轮询详情页并回填到同一 JSON。"""
+    json_dir = Path(__file__).resolve().parents[2] / "json"
+    json_dir.mkdir(parents=True, exist_ok=True)
+
     payload = _to_json_or_text(xhs_search_text)
     if not isinstance(payload, dict):
         return json.dumps({"ok": False, "error": "输入不是有效 JSON"}, ensure_ascii=False)
@@ -304,9 +327,7 @@ async def poll_details_from_search_result(
                 "xsec_token": xsec_token,
                 "note_url": f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}",
                 "title": str(note_card.get("display_title") or ""),
-                "image_list": (
-                    _flatten_wb_dft_image_urls(note_card.get("image_list"))
-                ),
+                "image_list": _extract_wb_dft_urls(item),
                 "user": note_card.get("user") if isinstance(note_card.get("user"), dict) else {},
                 "keyword": search_keyword,
             }
@@ -320,7 +341,7 @@ async def poll_details_from_search_result(
         timeout_seconds=timeout_seconds,
     )
 
-    output_file = Path(output_path)
+    output_file = Path(output_path) if output_path else (json_dir / "xhs_search_details_poll.json")
     output_file.parent.mkdir(parents=True, exist_ok=True)
     aggregate = {
         "ok": True,

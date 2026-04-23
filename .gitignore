@@ -20,3 +20,7 @@ build/
 
 # Logs
 *.log
+
+# Generated search outputs at repo root
+/xhs_search_*.json
+/xhs_search_details_poll.json
