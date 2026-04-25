@@ -107,17 +107,21 @@ def _extract_note_targets(search_payload: dict[str, Any]) -> list[dict[str, Any]
     for item in items:
         if not isinstance(item, dict):
             continue
-        if item.get("model_type") != "note":
+        model_type = str(item.get("model_type") or "").strip().lower()
+        raw_note_card = item.get("note_card")
+        note_card: dict[str, Any] = raw_note_card if isinstance(raw_note_card, dict) else {}
+        if model_type not in ("", "note", "note_v2", "normal", "hot_note") and not note_card:
             continue
-        note_id = str(item.get("id") or "")
-        xsec_token = str(item.get("xsec_token") or "")
+        note_id = str(item.get("id") or item.get("note_id") or "")
+        xsec_token = str(
+            item.get("xsec_token")
+            or note_card.get("xsec_token")
+            or note_card.get("token")
+            or ""
+        )
         if not note_id or not xsec_token:
             continue
         note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
-        note_card: dict[str, Any] = {}
-        raw_note_card = item.get("note_card")
-        if isinstance(raw_note_card, dict):
-            note_card = raw_note_card
         title = str(note_card.get("display_title") or "")
         image_list = _extract_wb_dft_urls(item)
         user_raw = note_card.get("user")
@@ -221,20 +225,19 @@ async def search_and_poll_notes(
         if req_text and req_text not in clean_requirements:
             clean_requirements.append(req_text)
 
-    # 主题词按 page_size 搜；若 requirements 长度 > 1，则拼接 topic+requirement 各搜 3 条。
+    # 固定请求量：topic 请求 8 条；每个 requirement 请求 2 条。
     query_specs: list[dict[str, Any]] = [
-        {"query": main_keyword, "source": "topic", "requirement": None, "size": max(int(page_size), 1)}
+        {"query": main_keyword, "source": "topic", "requirement": None, "size": 8}
     ]
-    if len(clean_requirements) > 1:
-        for req in clean_requirements:
-            query_specs.append(
-                {
-                    "query": f"{main_keyword}{req}",
-                    "source": "requirement",
-                    "requirement": req,
-                    "size": 3,
-                }
-            )
+    for req in clean_requirements:
+        query_specs.append(
+            {
+                "query": f"{main_keyword}{req}",
+                "source": "requirement",
+                "requirement": req,
+                "size": 2,
+            }
+        )
 
     async def _run_query(spec: dict[str, Any]) -> dict[str, Any]:
         query = str(spec["query"])
@@ -292,9 +295,9 @@ async def search_and_poll_notes(
         "params": {
             "topic": main_keyword,
             "requirements": clean_requirements,
-            "page_size": max(int(page_size), 1),
+            "page_size": 8,
             "sort": sort,
-            "sub_query_page_size": 3,
+            "sub_query_page_size": 2,
             "query_count": len(query_specs),
         },
         "notes": merged_notes,

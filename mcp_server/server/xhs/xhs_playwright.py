@@ -115,6 +115,7 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
     )
 
     browser = None
+    seen_search_urls: list[str] = []
     async with async_playwright() as p:
         try:
             browser = await _launch_browser_async(p, args=_args)
@@ -129,8 +130,25 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
             page = await context.new_page()
             await page.set_extra_http_headers({"Accept-Language": "zh-CN,zh;q=0.9"})
 
+            search_api_markers = (
+                "/api/sns/web/v1/search/notes",
+                "/api/sns/web/v1/search/general",
+                "/api/sns/web/v1/search/filter",
+            )
+
+            def _track_search_response(resp) -> None:
+                try:
+                    if any(marker in resp.url for marker in search_api_markers):
+                        seen_search_urls.append(resp.url)
+                        if len(seen_search_urls) > 8:
+                            del seen_search_urls[:-8]
+                except Exception:
+                    return
+
+            page.on("response", _track_search_response)
+
             async with page.expect_response(
-                lambda r: "/api/sns/web/v1/search/notes" in r.url
+                lambda r: any(marker in r.url for marker in search_api_markers)
                 and r.request.method == "POST",
                 timeout=timeout_ms,
             ) as resp_info:
@@ -167,10 +185,13 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
                 e,
             )
             if "Timeout" in name or "timeout" in str(e).lower():
+                recent_urls = ", ".join(seen_search_urls[-5:])
+                extra_line = f"- 最近命中的搜索接口: {recent_urls}\n" if recent_urls else ""
                 return (
                     f"浏览器抓取超时（{timeout_seconds}s）：未等到 search/notes 请求。\n"
                     "- 若需登录：执行 `uv run python xhs_playwright.py --save-login` 保存会话后重试。\n"
                     "- 调试可设环境变量 XHS_PLAYWRIGHT_HEADLESS=0 观察页面。\n"
+                    f"{extra_line}"
                     f"详情: {e}"
                 )
             err = str(e)
