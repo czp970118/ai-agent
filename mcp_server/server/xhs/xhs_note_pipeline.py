@@ -253,9 +253,11 @@ async def search_and_poll_notes(
     requirements: list[str] | None = None,
 ) -> str:
     """关键词搜索后轮询详情，支持主题词 + 需求词组合搜索并合并结果。"""
-    poll_count = 3
-    interval_seconds = 2.0
-    timeout_seconds = 30.0
+    poll_count = max(int(os.getenv("XHS_POLL_COUNT", "2")), 1)
+    interval_seconds = max(float(os.getenv("XHS_POLL_INTERVAL_SECONDS", "1.0")), 0.1)
+    timeout_seconds = max(float(os.getenv("XHS_SEARCH_TIMEOUT_SECONDS", "15.0")), 5.0)
+    requirement_enabled = _parse_bool_flag(os.getenv("XHS_ENABLE_REQUIREMENT_QUERIES", "0")) is True
+    query_parallel = _parse_bool_flag(os.getenv("XHS_QUERY_PARALLEL", "0")) is True
     main_keyword = (keyword or "").strip()
     if not main_keyword:
         return json.dumps({"ok": False, "error": "keyword 不能为空"}, ensure_ascii=False)
@@ -270,15 +272,25 @@ async def search_and_poll_notes(
     query_specs: list[dict[str, Any]] = [
         {"query": main_keyword, "source": "topic", "requirement": None, "size": 8}
     ]
-    for req in clean_requirements:
-        query_specs.append(
-            {
-                "query": f"{main_keyword}{req}",
-                "source": "requirement",
-                "requirement": req,
-                "size": 2,
-            }
-        )
+    if requirement_enabled:
+        for req in clean_requirements:
+            query_specs.append(
+                {
+                    "query": f"{main_keyword}{req}",
+                    "source": "requirement",
+                    "requirement": req,
+                    "size": 2,
+                }
+            )
+    logger.info(
+        "xhs_query_strategy timeout_seconds=%s poll_count=%s interval_seconds=%s requirement_enabled=%s query_parallel=%s requirement_count=%s",
+        timeout_seconds,
+        poll_count,
+        interval_seconds,
+        requirement_enabled,
+        query_parallel,
+        len(clean_requirements),
+    )
 
     async def _run_query(spec: dict[str, Any]) -> dict[str, Any]:
         query = str(spec["query"])
@@ -331,7 +343,13 @@ async def search_and_poll_notes(
             "note_count": len(notes),
         }
 
-    query_results = await asyncio.gather(*[_run_query(spec) for spec in query_specs])
+    if query_parallel:
+        query_results = await asyncio.gather(*[_run_query(spec) for spec in query_specs])
+    else:
+        query_results: list[dict[str, Any]] = []
+        for spec in query_specs:
+            query_results.append(await _run_query(spec))
+            await asyncio.sleep(max(float(os.getenv("XHS_QUERY_GAP_SECONDS", "0.6")), 0.1))
     merged_notes: list[dict[str, Any]] = []
     for result in query_results:
         for note in result.get("notes", []):
