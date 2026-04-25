@@ -147,9 +147,23 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
 
             page.on("response", _track_search_response)
 
+            keyword_lower = keyword.strip().lower()
+
+            def _is_target_search_response(resp) -> bool:
+                if resp.request.method != "POST":
+                    return False
+                if not any(marker in resp.url for marker in search_api_markers):
+                    return False
+                if not keyword_lower:
+                    return True
+                try:
+                    post_data = str(resp.request.post_data or "").lower()
+                except Exception:
+                    post_data = ""
+                return keyword_lower in post_data
+
             async with page.expect_response(
-                lambda r: any(marker in r.url for marker in search_api_markers)
-                and r.request.method == "POST",
+                _is_target_search_response,
                 timeout=timeout_ms,
             ) as resp_info:
                 await page.goto(search_url, wait_until="domcontentloaded", timeout=timeout_ms)
