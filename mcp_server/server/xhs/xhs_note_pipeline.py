@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import random
 import re
@@ -11,6 +12,8 @@ try:
 except ImportError:
     # 兼容直接执行：python xhs/xhs_note_pipeline.py
     from xhs_search import fetch_xhs_note_detail_by_html, search_xhs_hot
+
+logger = logging.getLogger(__name__)
 
 
 def _to_json_or_text(raw: str) -> Any:
@@ -101,27 +104,50 @@ def _extract_note_targets(search_payload: dict[str, Any]) -> list[dict[str, Any]
     data = search_payload.get("data") if isinstance(search_payload, dict) else None
     items = data.get("items") if isinstance(data, dict) else None
     if not isinstance(items, list):
+        if isinstance(search_payload, dict):
+            logger.warning("xhs_extract_targets_no_items keys=%s", list(search_payload.keys())[:20])
         return []
 
     out: list[dict[str, Any]] = []
+    skipped = {
+        "non_dict": 0,
+        "model_type_filtered": 0,
+        "missing_note_id": 0,
+        "missing_xsec_token": 0,
+    }
     for item in items:
         if not isinstance(item, dict):
+            skipped["non_dict"] += 1
             continue
         model_type = str(item.get("model_type") or "").strip().lower()
         raw_note_card = item.get("note_card")
         note_card: dict[str, Any] = raw_note_card if isinstance(raw_note_card, dict) else {}
         if model_type not in ("", "note", "note_v2", "normal", "hot_note") and not note_card:
+            skipped["model_type_filtered"] += 1
             continue
-        note_id = str(item.get("id") or item.get("note_id") or "")
+        note_id = str(
+            item.get("id")
+            or item.get("note_id")
+            or note_card.get("id")
+            or note_card.get("note_id")
+            or ""
+        )
         xsec_token = str(
             item.get("xsec_token")
             or note_card.get("xsec_token")
             or note_card.get("token")
             or ""
         )
-        if not note_id or not xsec_token:
+        if not note_id:
+            skipped["missing_note_id"] += 1
             continue
-        note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
+        if not xsec_token:
+            skipped["missing_xsec_token"] += 1
+        note_url = (
+            f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
+            if xsec_token
+            else f"https://www.xiaohongshu.com/explore/{note_id}"
+        )
         title = str(note_card.get("display_title") or "")
         image_list = _extract_wb_dft_urls(item)
         user_raw = note_card.get("user")
@@ -136,6 +162,12 @@ def _extract_note_targets(search_payload: dict[str, Any]) -> list[dict[str, Any]
                 "user": user,
             }
         )
+    logger.info(
+        "xhs_extract_targets_stats total_items=%s extracted=%s skipped=%s",
+        len(items),
+        len(out),
+        json.dumps(skipped, ensure_ascii=False),
+    )
     return out
 
 
@@ -152,6 +184,7 @@ async def _poll_note_details_concurrently(
 
     total = max(int(poll_count), 1)
     limit = max(int(max_concurrency), 1)
+    stats = {"attempts": 0, "success": 0, "failed_after_retry": 0}
 
     for i in range(total):
         semaphore = asyncio.Semaphore(limit)
@@ -163,9 +196,10 @@ async def _poll_note_details_concurrently(
 
                 max_attempts = 3
                 for attempt in range(max_attempts):
+                    stats["attempts"] += 1
                     detail_text = await fetch_xhs_note_detail_by_html(
                         note_id=note["note_id"],
-                        xsec_token=note["xsec_token"],
+                        xsec_token=note.get("xsec_token") or "",
                         timeout_seconds=timeout_seconds,
                     )
                     detail_obj = _to_json_or_text(detail_text)
@@ -184,6 +218,7 @@ async def _poll_note_details_concurrently(
                         note.update(detail_data)
                         merged_images = _flatten_wb_dft_image_urls(note.get("image_list"))
                         note["image_list"] = merged_images or previous_images
+                        stats["success"] += 1
                         return
 
                     # 简单退避重试：每次失败后等待更久并叠加随机抖动。
@@ -198,11 +233,17 @@ async def _poll_note_details_concurrently(
                     note.update(fallback_data)
                     merged_images = _flatten_wb_dft_image_urls(note.get("image_list"))
                     note["image_list"] = merged_images or previous_images
+                    stats["failed_after_retry"] += 1
                     return
 
         await asyncio.gather(*[_fetch_and_merge(note) for note in notes])
         if i < total - 1:
             await asyncio.sleep(max(float(interval_seconds), 0.1))
+    logger.info(
+        "xhs_poll_details_stats total_notes=%s stats=%s",
+        len(notes),
+        json.dumps(stats, ensure_ascii=False),
+    )
 
 
 async def search_and_poll_notes(
@@ -242,6 +283,13 @@ async def search_and_poll_notes(
     async def _run_query(spec: dict[str, Any]) -> dict[str, Any]:
         query = str(spec["query"])
         size = int(spec["size"])
+        logger.info(
+            "xhs_query_start query=%s source=%s requirement=%s page_size=%s",
+            query,
+            spec.get("source"),
+            spec.get("requirement"),
+            size,
+        )
         search_text = await search_xhs_hot(
             keyword=query,
             timeout_seconds=timeout_seconds,
@@ -250,6 +298,7 @@ async def search_and_poll_notes(
         )
         search_payload = _to_json_or_text(search_text)
         if not isinstance(search_payload, dict):
+            logger.warning("xhs_query_non_json query=%s preview=%s", query, str(search_text)[:500])
             return {
                 "query": query,
                 "source": spec["source"],
@@ -266,6 +315,11 @@ async def search_and_poll_notes(
             poll_count=poll_count,
             interval_seconds=interval_seconds,
             timeout_seconds=timeout_seconds,
+        )
+        logger.info(
+            "xhs_query_done query=%s extracted_notes=%s",
+            query,
+            len(notes),
         )
 
         return {

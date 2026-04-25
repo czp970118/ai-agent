@@ -225,7 +225,7 @@ async def search_xhs_hot(
 
     text = await fetch_search_notes_via_browser(
         keyword=keyword,
-        timeout_seconds=max(float(timeout_seconds), 45.0),
+        timeout_seconds=max(float(timeout_seconds), 10.0),
     )
     logger.info(
         "xhs_search_hot_raw keyword=%s sort=%s page_size=%s text_preview=%s",

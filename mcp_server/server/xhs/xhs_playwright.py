@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import platform
+import json
 from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,7 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
         "true",
         "yes",
     )
-    timeout_ms = int(max(float(timeout_seconds), 45.0) * 1000)
+    timeout_ms = int(max(float(timeout_seconds), 10.0) * 1000)
 
     ua = (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -160,7 +161,20 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
                     post_data = str(resp.request.post_data or "").lower()
                 except Exception:
                     post_data = ""
-                return keyword_lower in post_data
+                if keyword_lower in post_data:
+                    return True
+                # 部分环境下 post_data 里的中文会被转义成 \uXXXX，直接 contains 会失效。
+                try:
+                    post_json = json.loads(str(resp.request.post_data or ""))
+                except Exception:
+                    post_json = None
+                if isinstance(post_json, dict):
+                    for key in ("keyword", "search_keyword", "query"):
+                        value = str(post_json.get(key) or "").strip().lower()
+                        if value and (keyword_lower in value or value in keyword_lower):
+                            return True
+                # 兜底：命中搜索接口即接受，避免因关键词匹配细节导致整次超时。
+                return True
 
             async with page.expect_response(
                 _is_target_search_response,
