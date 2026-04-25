@@ -200,8 +200,10 @@ async def poll_xhs_note_detail(
         )
         try:
             detail_obj = json.loads(detail_text)
-            latest = detail_obj.get("data") if isinstance(detail_obj, dict) else {}
-            if not isinstance(latest, dict):
+            detail_data = detail_obj.get("data") if isinstance(detail_obj, dict) else {}
+            if isinstance(detail_data, dict):
+                latest = detail_data
+            else:
                 latest = {}
         except Exception:
             latest = {"raw_text": detail_text}

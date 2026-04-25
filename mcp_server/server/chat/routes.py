@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from typing import Any
+from uuid import uuid4
 import httpx
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -314,7 +315,14 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
     async def event_stream():
+        trace_id = uuid4().hex[:12]
         xhs_display_meta: dict[str, Any] | None = None
+        logger.info(
+            "chat_stream_start trace_id=%s agent=%s message_count=%s",
+            trace_id,
+            body.agent,
+            len(body.messages),
+        )
         preprocess = await _call_optional_webhook(
             preprocess_url,
             {"agent": body.agent, "messages": [m.model_dump() for m in body.messages], "workflow": body.workflow},
@@ -344,7 +352,8 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 )
                 planned = fallback
             logger.info(
-                "xhs_plan_params=%s",
+                "xhs_plan_params trace_id=%s payload=%s",
+                trace_id,
                 json.dumps(
                     {
                         "topic": planned.get("topic"),
@@ -363,7 +372,8 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 "requirements": planned.get("requirements") if isinstance(planned.get("requirements"), list) else [],
             }
             logger.info(
-                "xhs_api_request=%s",
+                "xhs_api_request trace_id=%s payload=%s",
+                trace_id,
                 json.dumps(xhs_request_payload, ensure_ascii=False),
             )
             search_text = await search_impl(
@@ -372,10 +382,11 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 sort=xhs_request_payload["sort"],
                 requirements=xhs_request_payload["requirements"],
             )
-            logger.info("xhs_api_raw_response=%s", search_text[:3000])
+            logger.info("xhs_api_raw_response trace_id=%s preview=%s", trace_id, search_text[:3000])
             search_payload = _resolve_xhs_output(search_text)
             logger.info(
-                "xhs_api_resolved=%s",
+                "xhs_api_resolved trace_id=%s payload=%s",
+                trace_id,
                 json.dumps(
                     {
                         "ok": search_payload.get("ok") if isinstance(search_payload, dict) else False,
@@ -397,6 +408,12 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 else 0
             )
             if note_count < 3:
+                logger.warning(
+                    "xhs_note_count_low trace_id=%s note_count=%s topic=%s",
+                    trace_id,
+                    note_count,
+                    str(planned.get("topic") or ""),
+                )
                 yield _sse("error", {"error": f"热贴数量不足（{note_count}），请换关键词重试"})
                 yield _sse("end", {"ok": False})
                 return
@@ -460,6 +477,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                             full_text_parts.append(delta)
                             yield _sse("delta", {"content": delta})
         except Exception as exc:
+            logger.exception("chat_stream_exception trace_id=%s error=%s", trace_id, exc)
             yield _sse("error", {"error": f"流式生成失败: {exc}"})
             yield _sse("end", {"ok": False})
             return
@@ -475,7 +493,8 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 "search_meta": xhs_meta.get("search_meta") or {"query_count": 0, "query_terms": []},
             }
             logger.info(
-                "xhs_generation_result=%s",
+                "xhs_generation_result trace_id=%s payload=%s",
+                trace_id,
                 json.dumps(
                     {
                         "length": len(final_text),
@@ -485,6 +504,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                     ensure_ascii=False,
                 ),
             )
+        logger.info("chat_stream_end trace_id=%s ok=%s", trace_id, True)
         yield _sse("end", end_payload)
 
         if postprocess_url:
