@@ -391,14 +391,21 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 yield _sse("error", {"error": "热贴数据获取失败", "detail": search_payload})
                 yield _sse("end", {"ok": False})
                 return
+            note_count = (
+                len(search_payload.get("notes", []))
+                if isinstance(search_payload.get("notes"), list)
+                else 0
+            )
+            if note_count < 3:
+                yield _sse("error", {"error": f"热贴数量不足（{note_count}），请换关键词重试"})
+                yield _sse("end", {"ok": False})
+                return
             xhs_display_meta = _extract_xhs_references_and_meta(search_payload, planned)
             yield _sse(
                 "stage",
                 {
                     "name": "fetched",
-                    "note_count": len(search_payload.get("notes", []))
-                    if isinstance(search_payload.get("notes"), list)
-                    else 0,
+                    "note_count": note_count,
                 },
             )
 
