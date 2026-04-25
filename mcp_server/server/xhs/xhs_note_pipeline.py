@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import random
 import re
 from pathlib import Path
@@ -19,12 +20,33 @@ def _to_json_or_text(raw: str) -> Any:
         return {"raw_text": raw}
 
 
+def _parse_bool_flag(value: str) -> bool | None:
+    text = (value or "").strip().lower()
+    if not text:
+        return None
+    if text in ("1", "true", "yes", "on"):
+        return True
+    if text in ("0", "false", "no", "off"):
+        return False
+    return None
+
+
+def _should_persist_search_json() -> bool:
+    """默认：本地落盘，线上不落盘；可通过环境变量覆盖。"""
+    override = _parse_bool_flag(os.getenv("XHS_PERSIST_SEARCH_JSON", ""))
+    if override is not None:
+        return override
+    env = (
+        os.getenv("APP_ENV", "")
+        or os.getenv("ENV", "")
+        or os.getenv("NODE_ENV", "")
+    ).strip().lower()
+    return env not in ("prod", "production")
+
+
 def _keyword_output_path(keyword: str) -> str:
     safe = re.sub(r'[\\/:*?"<>|]+', "_", (keyword or "").strip())
-    safe = re.sub(r"\s+", "_", safe)
-    safe = safe.strip("._")
-    if not safe:
-        safe = "keyword"
+    safe = re.sub(r"\s+", "_", safe).strip("._") or "keyword"
     json_dir = Path(__file__).resolve().parents[2] / "json"
     json_dir.mkdir(parents=True, exist_ok=True)
     return str(json_dir / f"xhs_search_{safe}.json")
@@ -60,7 +82,10 @@ def _extract_raw_image_list(item: Any) -> list[dict[str, Any]]:
     """优先返回原始 image_list（对象数组），避免误变成空列表。"""
     if not isinstance(item, dict):
         return []
-    note_card = item.get("note_card") if isinstance(item.get("note_card"), dict) else {}
+    note_card: dict[str, Any] = {}
+    raw_note_card = item.get("note_card")
+    if isinstance(raw_note_card, dict):
+        note_card = raw_note_card
     candidates = [item.get("image_list"), note_card.get("image_list")]
     for candidate in candidates:
         if isinstance(candidate, list) and all(isinstance(x, dict) for x in candidate):
@@ -89,10 +114,14 @@ def _extract_note_targets(search_payload: dict[str, Any]) -> list[dict[str, Any]
         if not note_id or not xsec_token:
             continue
         note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
-        note_card = item.get("note_card") if isinstance(item.get("note_card"), dict) else {}
+        note_card: dict[str, Any] = {}
+        raw_note_card = item.get("note_card")
+        if isinstance(raw_note_card, dict):
+            note_card = raw_note_card
         title = str(note_card.get("display_title") or "")
         image_list = _extract_wb_dft_urls(item)
-        user = note_card.get("user") if isinstance(note_card.get("user"), dict) else {}
+        user_raw = note_card.get("user")
+        user = user_raw if isinstance(user_raw, dict) else {}
         out.append(
             {
                 "note_id": note_id,
@@ -146,7 +175,7 @@ async def _poll_note_details_concurrently(
                         if raw_text.startswith("抓取失败:") or raw_text.startswith("参数错误:"):
                             failed = True
 
-                    if not failed:
+                    if not failed and isinstance(detail_data, dict):
                         previous_images = note.get("image_list") if isinstance(note.get("image_list"), list) else []
                         note.update(detail_data)
                         merged_images = _flatten_wb_dft_image_urls(note.get("image_list"))
@@ -161,11 +190,8 @@ async def _poll_note_details_concurrently(
 
                     # 最后一次仍失败，保留失败信息，避免整批中断。
                     previous_images = note.get("image_list") if isinstance(note.get("image_list"), list) else []
-                    note.update(
-                        detail_data
-                        if isinstance(detail_data, dict)
-                        else {"raw_text": detail_text}
-                    )
+                    fallback_data = detail_data if isinstance(detail_data, dict) else {"raw_text": detail_text}
+                    note.update(fallback_data)
                     merged_images = _flatten_wb_dft_image_urls(note.get("image_list"))
                     note["image_list"] = merged_images or previous_images
                     return
@@ -185,7 +211,6 @@ async def search_and_poll_notes(
     poll_count = 3
     interval_seconds = 2.0
     timeout_seconds = 30.0
-    output_path = _keyword_output_path(keyword)
     main_keyword = (keyword or "").strip()
     if not main_keyword:
         return json.dumps({"ok": False, "error": "keyword 不能为空"}, ensure_ascii=False)
@@ -274,18 +299,11 @@ async def search_and_poll_notes(
         },
         "notes": merged_notes,
     }
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(aggregate, f, ensure_ascii=False, indent=2)
-
-    return json.dumps(
-        {
-            "ok": True,
-            "output_path": output_path,
-            "query_count": len(query_specs),
-            "note_count": len(merged_notes),
-        },
-        ensure_ascii=False,
-    )
+    if _should_persist_search_json():
+        output_file = _keyword_output_path(main_keyword)
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(aggregate, f, ensure_ascii=False, indent=2)
+    return json.dumps(aggregate, ensure_ascii=False)
 
 
 async def poll_details_from_search_result(
@@ -294,6 +312,7 @@ async def poll_details_from_search_result(
     interval_seconds: float = 2.0,
     timeout_seconds: float = 30.0,
     output_path: str | None = None,
+    persist: bool | None = None,
 ) -> str:
     """基于已有 search JSON（如 xhs_search3.json）轮询详情页并回填到同一 JSON。"""
     json_dir = Path(__file__).resolve().parents[2] / "json"
@@ -302,7 +321,10 @@ async def poll_details_from_search_result(
     payload = _to_json_or_text(xhs_search_text)
     if not isinstance(payload, dict):
         return json.dumps({"ok": False, "error": "输入不是有效 JSON"}, ensure_ascii=False)
-    req = payload.get("request_params") if isinstance(payload.get("request_params"), dict) else {}
+    req: dict[str, Any] = {}
+    req_raw = payload.get("request_params")
+    if isinstance(req_raw, dict):
+        req = req_raw
     search_keyword = str(req.get("keyword") or "").strip()
 
     data = payload.get("data")
@@ -320,7 +342,11 @@ async def poll_details_from_search_result(
         xsec_token = str(item.get("xsec_token") or "")
         if not note_id or not xsec_token:
             continue
-        note_card = item.get("note_card") if isinstance(item.get("note_card"), dict) else {}
+        note_card: dict[str, Any] = {}
+        raw_note_card = item.get("note_card")
+        if isinstance(raw_note_card, dict):
+            note_card = raw_note_card
+        user_raw = note_card.get("user")
         notes.append(
             {
                 "note_id": note_id,
@@ -328,7 +354,7 @@ async def poll_details_from_search_result(
                 "note_url": f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}",
                 "title": str(note_card.get("display_title") or ""),
                 "image_list": _extract_wb_dft_urls(item),
-                "user": note_card.get("user") if isinstance(note_card.get("user"), dict) else {},
+                "user": user_raw if isinstance(user_raw, dict) else {},
                 "keyword": search_keyword,
             }
         )
@@ -341,8 +367,6 @@ async def poll_details_from_search_result(
         timeout_seconds=timeout_seconds,
     )
 
-    output_file = Path(output_path) if output_path else (json_dir / "xhs_search_details_poll.json")
-    output_file.parent.mkdir(parents=True, exist_ok=True)
     aggregate = {
         "ok": True,
         "params": {
@@ -352,11 +376,20 @@ async def poll_details_from_search_result(
         },
         "notes": notes,
     }
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(aggregate, f, ensure_ascii=False, indent=2)
+    should_persist = _should_persist_search_json() if persist is None else persist
+    if should_persist:
+        output_file = (
+            Path(output_path)
+            if output_path
+            else (json_dir / "xhs_search_details_poll.json")
+        )
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(aggregate, f, ensure_ascii=False, indent=2)
+        return json.dumps(
+            {"ok": True, "output_path": str(output_file), "poll_count": total},
+            ensure_ascii=False,
+        )
 
-    return json.dumps(
-        {"ok": True, "output_path": str(output_file), "poll_count": total},
-        ensure_ascii=False,
-    )
+    return json.dumps(aggregate, ensure_ascii=False)
 

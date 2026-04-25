@@ -8,9 +8,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 from urllib.parse import quote
+
+logger = logging.getLogger(__name__)
 
 
 def _chromium_channel() -> str | None:
@@ -32,6 +35,20 @@ def _chromium_channel() -> str | None:
     if os.path.isfile(chrome_bin):
         return "chrome"
     return None
+
+
+def _extra_launch_args(base_args: list[str]) -> list[str]:
+    args = list(base_args)
+    if platform.system() == "Linux":
+        # 云服务器/容器常见必需参数，避免 sandbox 与 /dev/shm 导致浏览器无法稳定启动。
+        args.extend(
+            [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+            ]
+        )
+    return args
 
 
 def _launch_browser(p, *, args: list[str]):
@@ -85,6 +102,17 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
     _args = ["--disable-blink-features=AutomationControlled"]
     if headless:
         _args = ["--headless=new", *_args]
+    _args = _extra_launch_args(_args)
+    logger.info(
+        "xhs_playwright_start keyword=%s timeout_seconds=%s headless=%s channel=%s storage=%s storage_exists=%s args=%s",
+        keyword,
+        timeout_seconds,
+        headless,
+        _chromium_channel() or "builtin",
+        storage,
+        os.path.isfile(storage),
+        _args,
+    )
 
     browser = None
     async with async_playwright() as p:
@@ -106,11 +134,24 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
                 and r.request.method == "POST",
                 timeout=timeout_ms,
             ) as resp_info:
-                await page.goto(search_url, wait_until="load", timeout=timeout_ms)
+                await page.goto(search_url, wait_until="domcontentloaded", timeout=timeout_ms)
+                await page.wait_for_timeout(1500)
 
             response = await resp_info.value
             text = await response.text()
+            logger.info(
+                "xhs_playwright_response status=%s url=%s body_len=%s",
+                response.status,
+                response.url,
+                len(text),
+            )
             if response.status >= 400:
+                logger.warning(
+                    "xhs_playwright_http_error status=%s reason=%s body_preview=%s",
+                    response.status,
+                    response.reason,
+                    text[:500],
+                )
                 return (
                     f"请求失败: HTTP {response.status} {response.reason}\n"
                     f"响应体: {text[:4000]}"
@@ -118,6 +159,13 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
             return text
         except Exception as e:
             name = type(e).__name__
+            logger.exception(
+                "xhs_playwright_exception type=%s keyword=%s timeout_seconds=%s error=%s",
+                name,
+                keyword,
+                timeout_seconds,
+                e,
+            )
             if "Timeout" in name or "timeout" in str(e).lower():
                 return (
                     f"浏览器抓取超时（{timeout_seconds}s）：未等到 search/notes 请求。\n"

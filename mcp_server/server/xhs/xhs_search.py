@@ -2,12 +2,14 @@ import asyncio
 import json
 import os
 import re
+import logging
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 
 SEARCH_NOTES_URL = "https://edith.xiaohongshu.com/api/sns/web/v1/search/notes"
+logger = logging.getLogger(__name__)
 
 def _keyword_output_path(keyword: str) -> str:
     safe = re.sub(r'[\\/:*?"<>|]+', "_", (keyword or "").strip())
@@ -225,6 +227,13 @@ async def search_xhs_hot(
         keyword=keyword,
         timeout_seconds=max(float(timeout_seconds), 45.0),
     )
+    logger.info(
+        "xhs_search_hot_raw keyword=%s sort=%s page_size=%s text_preview=%s",
+        keyword,
+        sort,
+        page_size,
+        text[:500],
+    )
     text = _to_json_or_error(text)
 
     # 统一 page_size，避免后续流程处理过多数据。
@@ -237,12 +246,20 @@ async def search_xhs_hot(
         )
         if isinstance(items, list):
             payload["data"]["items"] = items[: max(int(page_size), 1)]
+        logger.info(
+            "xhs_search_hot_resolved keyword=%s item_count=%s",
+            keyword,
+            len(payload.get("data", {}).get("items", []))
+            if isinstance(payload.get("data", {}).get("items", []), list)
+            else 0,
+        )
         payload.setdefault("request_params", {})
         payload["request_params"]["keyword"] = keyword
         payload["request_params"]["sort"] = sort
         payload["request_params"]["page_size"] = max(int(page_size), 1)
         return json.dumps(payload, ensure_ascii=False)
     except Exception:
+        logger.exception("xhs_search_hot_parse_error keyword=%s", keyword)
         return text
 
 
