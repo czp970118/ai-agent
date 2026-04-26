@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useCallback, useState, useRef, useEffect } from "react";
 import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,8 @@ import { AGENTS, type AgentId, agentUi } from "./agents";
 import AssistantComposer from "./AssistantComposer";
 import AssistantMessageList from "./AssistantMessageList";
 import { copyMessageToClipboard } from "./utils/clipboard";
+import { getMcpBaseUrl } from "./utils/mcpBaseUrl";
+import { getSessionUserId } from "./utils/sessionUserId";
 import type {
   McpStreamEvent,
   Message,
@@ -50,6 +52,9 @@ export default function AssistantClient({ agentId }: Props) {
   const ui = agentUi[agentId];
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [quotedMessage, setQuotedMessage] = useState<Message | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [hydratingSession, setHydratingSession] = useState(true);
   const [input, setInput] = useState("");
   const [standardMode, setStandardMode] = useState(false);
   const [topic, setTopic] = useState("");
@@ -86,7 +91,7 @@ export default function AssistantClient({ agentId }: Props) {
     }, 2000);
   }
 
-  function normalizeReferences(data: unknown): MessageReference[] {
+  const normalizeReferences = useCallback((data: unknown): MessageReference[] => {
     if (!Array.isArray(data)) return [];
     const refs: MessageReference[] = [];
     for (const item of data) {
@@ -97,9 +102,9 @@ export default function AssistantClient({ agentId }: Props) {
       refs.push({ title: title || url, url });
     }
     return refs;
-  }
+  }, []);
 
-  function normalizeSearchMeta(data: unknown): MessageSearchMeta | undefined {
+  const normalizeSearchMeta = useCallback((data: unknown): MessageSearchMeta | undefined => {
     if (!data || typeof data !== "object") return undefined;
     const raw = data as { query_count?: unknown; query_terms?: unknown };
     const queryCount = Number(raw.query_count);
@@ -113,7 +118,7 @@ export default function AssistantClient({ agentId }: Props) {
       queryCount: Number.isFinite(queryCount) ? Math.max(0, Math.trunc(queryCount)) : queryTerms.length,
       queryTerms,
     };
-  }
+  }, []);
 
   function upsertAssistantMessage(
     id: string,
@@ -137,13 +142,168 @@ export default function AssistantClient({ agentId }: Props) {
     });
   }
 
-  function getMcpBaseUrl(): string {
-    const env = process.env.NEXT_PUBLIC_MCP_SERVER_URL?.trim();
-    if (env) return env.replace(/\/+$/, "");
-    if (typeof window !== "undefined") {
-      return `${window.location.protocol}//${window.location.hostname}:8000`;
+  const normalizeStoredMessages = useCallback((data: unknown): Message[] => {
+    if (!Array.isArray(data)) return [];
+    const out: Message[] = [];
+    for (const item of data) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as {
+        id?: unknown;
+        role?: unknown;
+        content?: unknown;
+        meta?: unknown;
+      };
+      const role = String(row.role ?? "").trim();
+      if (role !== "user" && role !== "assistant") continue;
+      const content = String(row.content ?? "");
+      const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
+      const refs =
+        "references" in meta
+          ? normalizeReferences((meta as { references?: unknown }).references)
+          : [];
+      const searchMeta =
+        "search_meta" in meta
+          ? normalizeSearchMeta((meta as { search_meta?: unknown }).search_meta)
+          : undefined;
+      out.push({
+        id: String(row.id ?? createClientId()),
+        role,
+        content,
+        references: refs.length ? refs : undefined,
+        searchMeta,
+      });
     }
-    return "http://127.0.0.1:8000";
+    return out;
+  }, [normalizeReferences, normalizeSearchMeta]);
+
+  const resolveSession = useCallback(
+    async (forceNew: boolean): Promise<string> => {
+      const uid = getSessionUserId();
+      const res = await fetch(`${getMcpBaseUrl()}/chat/conversations/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: uid,
+          agent: agentId,
+          force_new: forceNew,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`会话初始化失败(${res.status})`);
+      }
+      const payload = (await res.json()) as {
+        conversation?: { id?: string };
+      };
+      const nextConversationId = String(payload.conversation?.id ?? "").trim();
+      if (!nextConversationId) {
+        throw new Error("会话初始化失败：缺少 conversation_id");
+      }
+      setConversationId(nextConversationId);
+      return nextConversationId;
+    },
+    [agentId]
+  );
+
+  const loadSessionMessages = useCallback(
+    async (userId: string) => {
+      const conversationsRes = await fetch(
+        `${getMcpBaseUrl()}/chat/conversations?user_id=${encodeURIComponent(userId)}&agent=${encodeURIComponent(
+          agentId
+        )}&limit=100`
+      );
+      if (!conversationsRes.ok) {
+        throw new Error(`历史会话加载失败(${conversationsRes.status})`);
+      }
+      const conversationsPayload = (await conversationsRes.json()) as {
+        conversations?: Array<{ id?: unknown; last_active_at?: unknown }>;
+      };
+      const cutoffTs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const recentConversationIds = Array.isArray(conversationsPayload.conversations)
+        ? conversationsPayload.conversations
+            .filter((row) => {
+              const lastActiveAt = String(row?.last_active_at ?? "");
+              const ts = Date.parse(lastActiveAt);
+              return Number.isFinite(ts) && ts >= cutoffTs;
+            })
+            .map((row) => String(row.id ?? "").trim())
+            .filter((id) => !!id)
+        : [];
+
+      if (!recentConversationIds.length) {
+        setMessages([]);
+        return;
+      }
+
+      const messageRows: Array<{
+        id: string;
+        role: "user" | "assistant";
+        content: string;
+        meta?: unknown;
+        createdAt: number;
+      }> = [];
+
+      for (const conversationId of recentConversationIds) {
+        const res = await fetch(
+          `${getMcpBaseUrl()}/chat/conversations/${encodeURIComponent(conversationId)}/messages`
+        );
+        if (!res.ok) {
+          throw new Error(`历史消息加载失败(${res.status})`);
+        }
+        const payload = (await res.json()) as {
+          messages?: Array<{
+            id?: unknown;
+            role?: unknown;
+            content?: unknown;
+            meta?: unknown;
+            created_at?: unknown;
+          }>;
+        };
+        if (!Array.isArray(payload.messages)) continue;
+        for (const row of payload.messages) {
+          const role = String(row.role ?? "").trim();
+          if (role !== "user" && role !== "assistant") continue;
+          messageRows.push({
+            id: String(row.id ?? createClientId()),
+            role,
+            content: String(row.content ?? ""),
+            meta: row.meta,
+            createdAt: Date.parse(String(row.created_at ?? "")) || 0,
+          });
+        }
+      }
+
+      messageRows.sort((a, b) => a.createdAt - b.createdAt);
+      setMessages(
+        normalizeStoredMessages(
+          messageRows.map((row) => ({
+            id: row.id,
+            role: row.role,
+            content: row.content,
+            meta: row.meta,
+          }))
+        )
+      );
+    },
+    [agentId, normalizeStoredMessages]
+  );
+
+  async function persistMessages(
+    nextConversationId: string,
+    rows: Array<{
+      role: "user" | "assistant";
+      content: string;
+      meta?: Record<string, unknown>;
+    }>
+  ) {
+    if (!rows.length) return;
+    await fetch(
+      `${getMcpBaseUrl()}/chat/conversations/${encodeURIComponent(nextConversationId)}/messages`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: rows }),
+      }
+    );
   }
 
   function parseSseChunk(chunk: string): McpStreamEvent[] {
@@ -178,13 +338,20 @@ export default function AssistantClient({ agentId }: Props) {
     workflowPayload: Record<string, unknown> | null,
     assistantMessageId: string,
     signal: AbortSignal
-  ) {
+  ): Promise<{
+    content: string;
+    references: MessageReference[];
+    searchMeta?: MessageSearchMeta;
+  }> {
+    const wf: Record<string, unknown> = { ...(workflowPayload ?? {}) };
+    wf.user_id = getSessionUserId();
+
     const res = await fetch(`${getMcpBaseUrl()}/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         agent: agentId,
-        workflow: workflowPayload ?? {},
+        workflow: wf,
         messages: conversationForChat.map((m) => ({ role: m.role, content: m.content })),
       }),
       signal,
@@ -202,6 +369,8 @@ export default function AssistantClient({ agentId }: Props) {
     const decoder = new TextDecoder();
     let buffer = "";
     let content = "";
+    let lastReferences: MessageReference[] = [];
+    let lastSearchMeta: MessageSearchMeta | undefined;
 
     while (true) {
       const { value, done } = await reader.read();
@@ -253,17 +422,29 @@ export default function AssistantClient({ agentId }: Props) {
 
             const finalContent = (endContent || content || "").trim() || "没有收到回复。";
             upsertAssistantMessage(assistantMessageId, finalContent, endRefs, endSearchMeta);
+            content = finalContent;
+            lastReferences = endRefs;
+            lastSearchMeta = endSearchMeta;
           }
         }
       }
     }
+    return {
+      content: content.trim() || "没有收到回复。",
+      references: lastReferences,
+      searchMeta: lastSearchMeta,
+    };
   }
 
   async function executeAgentRun(
     conversationForChat: Message[],
     workflowPayload: Record<string, unknown> | null,
     signal: AbortSignal
-  ): Promise<void> {
+  ): Promise<{
+    content: string;
+    references: MessageReference[];
+    searchMeta?: MessageSearchMeta;
+  }> {
     const assistantMessageId = createClientId();
     streamingAssistantIdRef.current = assistantMessageId;
     setMessages((prev) => [
@@ -275,7 +456,7 @@ export default function AssistantClient({ agentId }: Props) {
       },
     ]);
 
-    await runMcpStreamChat(
+    const generated = await runMcpStreamChat(
       conversationForChat,
       workflowPayload ?? {
         agent: agentId,
@@ -286,17 +467,18 @@ export default function AssistantClient({ agentId }: Props) {
       signal
     );
     streamingAssistantIdRef.current = null;
+    return generated;
   }
 
-  async function withInFlightAbort(
-    run: (signal: AbortSignal) => Promise<void>
-  ): Promise<void> {
+  async function withInFlightAbort<T>(
+    run: (signal: AbortSignal) => Promise<T>
+  ): Promise<T | null> {
     setLoading(true);
     const controller = new AbortController();
     inFlightAbortRef.current = controller;
     const signal = controller.signal;
     try {
-      await run(signal);
+      return await run(signal);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         const sid = streamingAssistantIdRef.current;
@@ -315,7 +497,7 @@ export default function AssistantClient({ agentId }: Props) {
           );
         }
         streamingAssistantIdRef.current = null;
-        return;
+        return null;
       }
       const message =
         error instanceof Error ? error.message : "网络或服务器错误，请稍后重试。";
@@ -338,11 +520,45 @@ export default function AssistantClient({ agentId }: Props) {
         ];
       });
       streamingAssistantIdRef.current = null;
+      return null;
     } finally {
       inFlightAbortRef.current = null;
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrate() {
+      setHydratingSession(true);
+      try {
+        const uid = getSessionUserId();
+        const nextConversationId = await resolveSession(false);
+        if (cancelled) return;
+        if (!nextConversationId) return;
+        await loadSessionMessages(uid);
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error ? error.message : "会话恢复失败，请稍后重试。";
+        setMessages([
+          {
+            id: createClientId(),
+            role: "assistant",
+            content: `错误：${message}`,
+          },
+        ]);
+      } finally {
+        if (!cancelled) {
+          setHydratingSession(false);
+        }
+      }
+    }
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSessionMessages, resolveSession]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -383,17 +599,54 @@ export default function AssistantClient({ agentId }: Props) {
       role: "user",
       content: text,
     };
+    const quoted = quotedMessage;
+    const messageForModel =
+      quoted && quoted.content.trim()
+        ? `【引用消息】\n${quoted.content.trim()}\n\n【我的补充】\n${text}`
+        : text;
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
+    setQuotedMessage(null);
     if (isXHS && standardMode) {
       setTopic("");
       setRequirements("");
       setAutoImage(false);
     }
 
-    await withInFlightAbort((signal) =>
-      executeAgentRun([...messages, userMessage], workflowPayload, signal)
+    const generated = await withInFlightAbort((signal) =>
+      executeAgentRun(
+        [
+          ...messages,
+          {
+            ...userMessage,
+            content: messageForModel,
+          },
+        ],
+        workflowPayload,
+        signal
+      )
     );
+    if (!generated || !conversationId) return;
+    try {
+      await persistMessages(conversationId, [
+        { role: "user", content: userMessage.content },
+        {
+          role: "assistant",
+          content: generated.content,
+          meta: {
+            references: generated.references,
+            search_meta: generated.searchMeta
+              ? {
+                  query_count: generated.searchMeta.queryCount,
+                  query_terms: generated.searchMeta.queryTerms,
+                }
+              : undefined,
+          },
+        },
+      ]);
+    } catch {
+      // 聊天结果已经在页面展示，持久化失败不阻塞主流程
+    }
   }
 
   async function regenerateAssistantMessage(assistantId: string) {
@@ -480,7 +733,11 @@ export default function AssistantClient({ agentId }: Props) {
 
       <main className="flex flex-1 min-h-0 w-full max-w-3xl mx-auto flex-col">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-6 pb-2">
-          {messages.length === 0 ? (
+          {hydratingSession ? (
+            <div className="flex min-h-full flex-1 flex-col items-center justify-center py-12 text-center">
+              <p className="text-sm text-slate-500 dark:text-slate-400">正在加载最近一周记录...</p>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="flex min-h-full flex-1 flex-col items-center justify-center py-12 text-center">
               <div
                 className={`w-14 h-14 rounded-2xl ${ui.accentIconBg} flex items-center justify-center mb-4`}
@@ -503,6 +760,11 @@ export default function AssistantClient({ agentId }: Props) {
               copiedMessageId={copiedMessageId}
               userBubbleClass={ui.userBubble}
               onCopy={(msg) => void copyMessageCard(msg)}
+            onQuote={(msg) => setQuotedMessage(msg)}
+              onEdit={(msg) => {
+                setInput(msg.content);
+                setQuotedMessage(null);
+              }}
               onRegenerate={(assistantId) => void regenerateAssistantMessage(assistantId)}
               listEndRef={listEndRef}
             />
@@ -521,11 +783,13 @@ export default function AssistantClient({ agentId }: Props) {
           topic={topic}
           requirements={requirements}
           autoImage={autoImage}
+          quotedMessage={quotedMessage}
           onToggleStandardMode={() => setStandardMode((v) => !v)}
           onInputChange={setInput}
           onTopicChange={setTopic}
           onRequirementsChange={setRequirements}
           onAutoImageChange={setAutoImage}
+          onClearQuote={() => setQuotedMessage(null)}
           onSubmit={handleSubmit}
           onStop={stopInFlight}
         />

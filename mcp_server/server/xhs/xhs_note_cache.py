@@ -207,3 +207,207 @@ def db_upsert_query_cache(keyword: str, payload: dict[str, Any], requirements: l
                 ),
             )
         conn.commit()
+
+
+def db_list_cached_notes(
+    *,
+    keyword: str = "",
+    tag: str = "",
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    q = str(keyword or "").strip()
+    t = str(tag or "").strip()
+    page_size = max(1, min(int(limit), 100))
+    page_offset = max(0, int(offset))
+    db_path = _sqlite_db_path()
+    with sqlite3.connect(db_path) as conn:
+        _init_cache_db(conn)
+        where_parts: list[str] = []
+        where_args: list[Any] = []
+        if q:
+            where_parts.append("note_json LIKE ?")
+            where_args.append(f"%{q}%")
+        if t:
+            where_parts.append("tags_json LIKE ?")
+            where_args.append(f'%"{t}"%')
+        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
+        total = conn.execute(
+            f"SELECT COUNT(1) FROM xhs_note_cache {where_sql}",
+            tuple(where_args),
+        ).fetchone()
+        total_count = int(total[0] if total else 0)
+
+        rows = conn.execute(
+            f"""
+            SELECT note_id, note_json, tags_json, query_terms_json, used_count, last_used_at, updated_at
+            FROM xhs_note_cache
+            {where_sql}
+            ORDER BY updated_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (*where_args, page_size, page_offset),
+        ).fetchall()
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        note_id, note_json, tags_json, query_terms_json, used_count, last_used_at, updated_at = row
+        try:
+            note = json.loads(str(note_json or "{}"))
+        except Exception:
+            note = {}
+        if not isinstance(note, dict):
+            note = {}
+        try:
+            tags = json.loads(str(tags_json or "[]"))
+        except Exception:
+            tags = []
+        if not isinstance(tags, list):
+            tags = []
+        try:
+            query_terms = json.loads(str(query_terms_json or "[]"))
+        except Exception:
+            query_terms = []
+        if not isinstance(query_terms, list):
+            query_terms = []
+
+        items.append(
+            {
+                "note_id": str(note.get("note_id") or note_id or ""),
+                "title": str(note.get("title") or ""),
+                "url": str(note.get("note_url") or note.get("url") or ""),
+                "content_text": str(note.get("content_text") or ""),
+                "like_count": note.get("like_count"),
+                "collect_count": note.get("collect_count"),
+                "comment_count": note.get("comment_count"),
+                "author_name": note.get("author_name"),
+                "updated_at": str(updated_at or ""),
+                "last_used_at": str(last_used_at or ""),
+                "used_count": int(used_count or 0),
+                "tags": tags,
+                "query_terms": query_terms,
+            }
+        )
+    return {
+        "items": items,
+        "total": total_count,
+        "limit": page_size,
+        "offset": page_offset,
+    }
+
+
+def db_get_cached_note(note_id: str) -> dict[str, Any] | None:
+    target_id = str(note_id or "").strip()
+    if not target_id:
+        return None
+    db_path = _sqlite_db_path()
+    with sqlite3.connect(db_path) as conn:
+        _init_cache_db(conn)
+        row = conn.execute(
+            """
+            SELECT note_id, note_json, tags_json, query_terms_json, used_count, last_used_at, updated_at
+            FROM xhs_note_cache
+            WHERE note_id = ?
+            LIMIT 1
+            """,
+            (target_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    note_id_value, note_json, tags_json, query_terms_json, used_count, last_used_at, updated_at = row
+    try:
+        note = json.loads(str(note_json or "{}"))
+    except Exception:
+        note = {}
+    if not isinstance(note, dict):
+        note = {}
+    try:
+        tags = json.loads(str(tags_json or "[]"))
+    except Exception:
+        tags = []
+    if not isinstance(tags, list):
+        tags = []
+    try:
+        query_terms = json.loads(str(query_terms_json or "[]"))
+    except Exception:
+        query_terms = []
+    if not isinstance(query_terms, list):
+        query_terms = []
+    return {
+        "note_id": str(note.get("note_id") or note_id_value or ""),
+        "title": str(note.get("title") or ""),
+        "url": str(note.get("note_url") or note.get("url") or ""),
+        "content_text": str(note.get("content_text") or ""),
+        "like_count": note.get("like_count"),
+        "collect_count": note.get("collect_count"),
+        "comment_count": note.get("comment_count"),
+        "author_name": note.get("author_name"),
+        "updated_at": str(updated_at or ""),
+        "last_used_at": str(last_used_at or ""),
+        "used_count": int(used_count or 0),
+        "tags": tags,
+        "query_terms": query_terms,
+    }
+
+
+def db_update_cached_note(note_id: str, *, title: str, content_text: str, tags: list[str]) -> dict[str, Any] | None:
+    target_id = str(note_id or "").strip()
+    if not target_id:
+        return None
+    clean_tags: list[str] = []
+    for raw in tags:
+        value = str(raw or "").strip()
+        if value and value not in clean_tags:
+            clean_tags.append(value)
+    db_path = _sqlite_db_path()
+    now = _utc_now_iso()
+    with sqlite3.connect(db_path) as conn:
+        _init_cache_db(conn)
+        row = conn.execute(
+            "SELECT note_json, query_terms_json, used_count, last_used_at, created_at FROM xhs_note_cache WHERE note_id = ? LIMIT 1",
+            (target_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        note_json, query_terms_json, used_count, last_used_at, created_at = row
+        try:
+            note = json.loads(str(note_json or "{}"))
+        except Exception:
+            note = {}
+        if not isinstance(note, dict):
+            note = {}
+        note["note_id"] = target_id
+        note["title"] = title
+        note["content_text"] = content_text
+        conn.execute(
+            """
+            UPDATE xhs_note_cache
+            SET note_json = ?, tags_json = ?, query_terms_json = ?, used_count = ?, last_used_at = ?, created_at = ?, updated_at = ?
+            WHERE note_id = ?
+            """,
+            (
+                json.dumps(note, ensure_ascii=False),
+                json.dumps(clean_tags, ensure_ascii=False),
+                str(query_terms_json or "[]"),
+                int(used_count or 0),
+                str(last_used_at or ""),
+                str(created_at or now),
+                now,
+                target_id,
+            ),
+        )
+        conn.commit()
+    return db_get_cached_note(target_id)
+
+
+def db_delete_cached_note(note_id: str) -> bool:
+    target_id = str(note_id or "").strip()
+    if not target_id:
+        return False
+    db_path = _sqlite_db_path()
+    with sqlite3.connect(db_path) as conn:
+        _init_cache_db(conn)
+        cursor = conn.execute("DELETE FROM xhs_note_cache WHERE note_id = ?", (target_id,))
+        conn.commit()
+        return int(cursor.rowcount or 0) > 0

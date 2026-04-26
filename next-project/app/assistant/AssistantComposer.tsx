@@ -1,6 +1,7 @@
 import React from "react";
 import { Button, Checkbox, Input, TextArea } from "@heroui/react";
 import type { AgentUiConfig } from "./agents";
+import type { Message } from "./utils/types";
 
 type Props = {
   isXHS: boolean;
@@ -14,11 +15,13 @@ type Props = {
   topic: string;
   requirements: string;
   autoImage: boolean;
+  quotedMessage: Message | null;
   onToggleStandardMode: () => void;
   onInputChange: (value: string) => void;
   onTopicChange: (value: string) => void;
   onRequirementsChange: (value: string) => void;
   onAutoImageChange: (selected: boolean) => void;
+  onClearQuote: () => void;
   onSubmit: (e: React.FormEvent) => void;
   onStop: () => void;
 };
@@ -49,11 +52,13 @@ export default function AssistantComposer({
   topic,
   requirements,
   autoImage,
+  quotedMessage,
   onToggleStandardMode,
   onInputChange,
   onTopicChange,
   onRequirementsChange,
   onAutoImageChange,
+  onClearQuote,
   onSubmit,
   onStop,
 }: Props) {
@@ -164,47 +169,81 @@ export default function AssistantComposer({
           </div>
         ) : (
           <div
-            className={`relative rounded-full px-2 py-1 ${
+            className={`rounded-[20px] px-2 py-1 ${
               isXHS ? "bg-slate-50/95 dark:bg-slate-800/90" : fieldThemeClass
             }`}
           >
-            <Input
-              fullWidth
-              value={input}
-              onChange={(e) => onInputChange(e.target.value)}
-              placeholder={ui.placeholder}
-              disabled={loading}
-              className="bg-transparent border-none shadow-none pr-10 !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  onSubmit(e as unknown as React.FormEvent);
-                }
-              }}
-            />
-            {loading ? (
-              <Button
-                type="button"
-                aria-label="停止生成"
-                onPress={onStop}
-                className="absolute right-1.5 top-1/2 h-8 min-w-8 w-8 -translate-y-1/2 rounded-full bg-slate-700 px-0 text-white shadow-sm hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500"
-              >
-                <StopIcon className="mx-auto h-3.5 w-3.5" />
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                isDisabled={!input.trim()}
-                aria-label="发送消息"
-                className={`absolute right-1.5 top-1/2 h-8 min-w-8 w-8 -translate-y-1/2 px-0 text-sm font-semibold rounded-full shadow-sm ${
-                  uiColor === "danger"
-                    ? "bg-rose-600 text-white"
-                    : "bg-teal-600 text-white"
-                }`}
-              >
-                ↑
-              </Button>
+            {quotedMessage && (
+              <div className="mb-1 rounded-lg border border-slate-200/90 bg-slate-100/75 px-3 py-2 text-left dark:border-slate-600/70 dark:bg-slate-700/35">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-300">引用消息</p>
+                  <button
+                    type="button"
+                    onClick={onClearQuote}
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-600/60 dark:hover:text-slate-200"
+                    aria-label="取消引用"
+                  >
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                      <path
+                        fillRule="evenodd"
+                        d="M4.22 4.22a.75.75 0 011.06 0L10 8.94l4.72-4.72a.75.75 0 111.06 1.06L11.06 10l4.72 4.72a.75.75 0 11-1.06 1.06L10 11.06l-4.72 4.72a.75.75 0 11-1.06-1.06L8.94 10 4.22 5.28a.75.75 0 010-1.06z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <p
+                  className="text-xs leading-5 text-slate-700 dark:text-slate-200"
+                  style={{
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {quotedMessage.content}
+                </p>
+              </div>
             )}
+            <div className="relative">
+              <Input
+                fullWidth
+                value={input}
+                onChange={(e) => onInputChange(e.target.value)}
+                placeholder={ui.placeholder}
+                disabled={loading}
+                className="bg-transparent border-none shadow-none pr-10 !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    onSubmit(e as unknown as React.FormEvent);
+                  }
+                }}
+              />
+              {loading ? (
+                <Button
+                  type="button"
+                  aria-label="停止生成"
+                  onPress={onStop}
+                  className="absolute right-1.5 top-1/2 h-8 min-w-8 w-8 -translate-y-1/2 rounded-full bg-slate-700 px-0 text-white shadow-sm hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500"
+                >
+                  <StopIcon className="mx-auto h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  isDisabled={!input.trim()}
+                  aria-label="发送消息"
+                  className={`absolute right-1.5 top-1/2 h-8 min-w-8 w-8 -translate-y-1/2 px-0 text-sm font-semibold rounded-full shadow-sm ${
+                    uiColor === "danger"
+                      ? "bg-rose-600 text-white"
+                      : "bg-teal-600 text-white"
+                  }`}
+                >
+                  ↑
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </div>

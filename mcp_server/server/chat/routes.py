@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 import httpx
 from fastapi import APIRouter
+from fastapi import HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field 
 
@@ -17,6 +18,22 @@ from ..constants import (
     SENTENCE_ANALYSIS_PROMPT,
 )
 from ..xhs.xhs_search import search_xhs_keyword_and_poll_details as search_impl
+from .memory_store import (
+    append_messages,
+    fetch_messages,
+    list_conversations,
+    resolve_conversation,
+)
+from .prompt_library_store import (
+    create_category,
+    create_style,
+    delete_category,
+    delete_style,
+    fetch_style_body,
+    list_prompt_library,
+    update_category,
+    update_style,
+)
 
 chat_router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger("mcp_server.chat")
@@ -37,6 +54,50 @@ class ChatStreamRequest(BaseModel):
     workflow: dict[str, Any] = Field(default_factory=dict)
 
 
+class ResolveConversationRequest(BaseModel):
+    user_id: str
+    agent: str
+    force_new: bool = False
+
+
+class ConversationMessageInput(BaseModel):
+    role: str
+    content: str
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class AppendConversationMessagesRequest(BaseModel):
+    messages: list[ConversationMessageInput] = Field(default_factory=list)
+
+
+class PromptCategoryCreate(BaseModel):
+    user_id: str
+    agent: str
+    name: str
+    sort_order: int | None = None
+
+
+class PromptCategoryPatch(BaseModel):
+    user_id: str
+    name: str | None = None
+    sort_order: int | None = None
+
+
+class PromptStyleCreate(BaseModel):
+    user_id: str
+    category_id: str
+    name: str
+    body: str = ""
+    sort_order: int | None = None
+
+
+class PromptStylePatch(BaseModel):
+    user_id: str
+    name: str | None = None
+    body: str | None = None
+    sort_order: int | None = None
+
+
 def _sse(event: str, data: Any) -> bytes:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
 
@@ -45,6 +106,18 @@ def _resolve_system_prompt(agent: str | None) -> str:
     if isinstance(agent, str) and agent.strip():
         return AGENT_SYSTEM_PROMPTS.get(agent.strip(), DEFAULT_SYSTEM_PROMPT)
     return DEFAULT_SYSTEM_PROMPT
+
+
+def _workflow_custom_system_prompt(workflow: dict[str, Any], agent: str | None) -> str | None:
+    user_id = str(workflow.get("user_id") or "").strip()
+    style_id = str(workflow.get("prompt_style_id") or "").strip()
+    aid = str(agent or "").strip()
+    if not user_id or not style_id or not aid:
+        return None
+    try:
+        return fetch_style_body(user_id=user_id, agent=aid, style_id=style_id)
+    except ValueError:
+        return None
 
 
 def _extract_last_user_message(messages: list[dict[str, Any]]) -> str:
@@ -302,8 +375,13 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
             body.agent,
             len(body.messages),
         )
+        wf = body.workflow if isinstance(body.workflow, dict) else {}
+        custom_prompt = _workflow_custom_system_prompt(wf, body.agent)
+
         working_messages = [m.model_dump() for m in body.messages]
-        system_prompt = _resolve_system_prompt(body.agent)
+        system_prompt = (
+            custom_prompt if custom_prompt is not None else _resolve_system_prompt(body.agent)
+        )
         final_messages = [{"role": "system", "content": system_prompt}, *working_messages]
 
         if (body.agent or "").strip() == "xiaohongshu":
@@ -395,8 +473,11 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 },
             )
 
+            xhs_system = (
+                custom_prompt if custom_prompt is not None else load_xiaohongshu_publish_prompt()
+            )
             final_messages = [
-                {"role": "system", "content": load_xiaohongshu_publish_prompt()},
+                {"role": "system", "content": xhs_system},
                 {
                     "role": "user",
                     "content": _build_xhs_generation_context(
@@ -477,3 +558,145 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
         yield _sse("end", end_payload)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@chat_router.post("/conversations/resolve")
+async def post_resolve_conversation(body: ResolveConversationRequest) -> dict[str, Any]:
+    try:
+        payload = resolve_conversation(
+            user_id=body.user_id,
+            agent=body.agent,
+            force_new=body.force_new,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return payload
+
+
+@chat_router.get("/conversations")
+async def get_conversations(
+    user_id: str = Query(..., min_length=1),
+    agent: str = Query(..., min_length=1),
+    limit: int = Query(20, ge=1, le=100),
+) -> dict[str, Any]:
+    try:
+        conversations = list_conversations(user_id=user_id, agent=agent, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"conversations": conversations}
+
+
+@chat_router.get("/conversations/{conversation_id}/messages")
+async def get_conversation_messages(conversation_id: str) -> dict[str, Any]:
+    try:
+        messages = fetch_messages(conversation_id=conversation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"messages": messages}
+
+
+@chat_router.post("/conversations/{conversation_id}/messages")
+async def post_conversation_messages(
+    conversation_id: str,
+    body: AppendConversationMessagesRequest,
+) -> dict[str, Any]:
+    try:
+        inserted = append_messages(
+            conversation_id=conversation_id,
+            messages=[message.model_dump() for message in body.messages],
+        )
+    except ValueError as exc:
+        text = str(exc)
+        status_code = 404 if text == "conversation not found" else 400
+        raise HTTPException(status_code=status_code, detail=text) from exc
+    return {"ok": True, "inserted": inserted}
+
+
+@chat_router.get("/prompt-library")
+async def get_prompt_library(
+    user_id: str = Query(..., min_length=1),
+    agent: str = Query(..., min_length=1),
+    include_body: bool = Query(False),
+) -> dict[str, Any]:
+    try:
+        return list_prompt_library(user_id=user_id, agent=agent, include_body=include_body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@chat_router.post("/prompt-library/categories")
+async def post_prompt_library_category(body: PromptCategoryCreate) -> dict[str, Any]:
+    try:
+        return create_category(
+            user_id=body.user_id,
+            agent=body.agent,
+            name=body.name,
+            sort_order=body.sort_order,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@chat_router.patch("/prompt-library/categories/{category_id}")
+async def patch_prompt_library_category(category_id: str, body: PromptCategoryPatch) -> dict[str, Any]:
+    try:
+        return update_category(
+            user_id=body.user_id,
+            category_id=category_id,
+            name=body.name,
+            sort_order=body.sort_order,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@chat_router.delete("/prompt-library/categories/{category_id}")
+async def delete_prompt_library_category(
+    category_id: str,
+    user_id: str = Query(..., min_length=1),
+) -> dict[str, Any]:
+    try:
+        delete_category(user_id=user_id, category_id=category_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@chat_router.post("/prompt-library/styles")
+async def post_prompt_library_style(body: PromptStyleCreate) -> dict[str, Any]:
+    try:
+        return create_style(
+            user_id=body.user_id,
+            category_id=body.category_id,
+            name=body.name,
+            body=body.body,
+            sort_order=body.sort_order,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@chat_router.patch("/prompt-library/styles/{style_id}")
+async def patch_prompt_library_style(style_id: str, body: PromptStylePatch) -> dict[str, Any]:
+    try:
+        return update_style(
+            user_id=body.user_id,
+            style_id=style_id,
+            name=body.name,
+            body=body.body,
+            sort_order=body.sort_order,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@chat_router.delete("/prompt-library/styles/{style_id}")
+async def delete_prompt_library_style(
+    style_id: str,
+    user_id: str = Query(..., min_length=1),
+) -> dict[str, Any]:
+    try:
+        delete_style(user_id=user_id, style_id=style_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
