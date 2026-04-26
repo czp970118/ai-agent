@@ -9,9 +9,11 @@ from typing import Any
 
 try:
     from .xhs_search import fetch_xhs_note_detail_by_html, search_xhs_hot
+    from .xhs_note_cache import db_fetch_cached_payload, db_upsert_query_cache
 except ImportError:
     # 兼容直接执行：python xhs/xhs_note_pipeline.py
     from xhs_search import fetch_xhs_note_detail_by_html, search_xhs_hot
+    from xhs_note_cache import db_fetch_cached_payload, db_upsert_query_cache
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,8 @@ def _should_persist_search_json() -> bool:
         or os.getenv("ENV", "")
         or os.getenv("NODE_ENV", "")
     ).strip().lower()
-    return env not in ("prod", "production")
+    # 默认更保守：仅在本地/开发环境落盘 JSON；其他环境（含未显式声明）不落盘。
+    return env in ("dev", "development", "local", "test")
 
 
 def _keyword_output_path(keyword: str) -> str:
@@ -267,10 +270,23 @@ async def search_and_poll_notes(
         req_text = str(req or "").strip()
         if req_text and req_text not in clean_requirements:
             clean_requirements.append(req_text)
+    target_count = max(int(page_size), 1)
+    db_payload = db_fetch_cached_payload(main_keyword, clean_requirements, target_count=target_count)
+    db_notes: list[dict[str, Any]] = []
+    if isinstance(db_payload, dict):
+        payload_notes = db_payload.get("notes")
+        if isinstance(payload_notes, list):
+            db_notes = [n for n in payload_notes if isinstance(n, dict)]
+    if len(db_notes) >= target_count:
+        logger.info("xhs_db_hit keyword=%s matched=%s target_count=%s", main_keyword, len(db_notes), target_count)
+        return json.dumps(db_payload, ensure_ascii=False)
+    need_count = max(target_count - len(db_notes), 0)
 
     # 固定请求量：topic 请求 8 条；每个 requirement 请求 2 条。
+    topic_query_size = min(max(int((need_count or target_count) * 1.5), 4), 12)
+    sub_query_size = min(max(int((need_count or target_count) * 0.6), 1), 4)
     query_specs: list[dict[str, Any]] = [
-        {"query": main_keyword, "source": "topic", "requirement": None, "size": 8}
+        {"query": main_keyword, "source": "topic", "requirement": None, "size": topic_query_size}
     ]
     if requirement_enabled:
         for req in clean_requirements:
@@ -279,7 +295,7 @@ async def search_and_poll_notes(
                     "query": f"{main_keyword}{req}",
                     "source": "requirement",
                     "requirement": req,
-                    "size": 2,
+                    "size": sub_query_size,
                 }
             )
     logger.info(
@@ -350,9 +366,18 @@ async def search_and_poll_notes(
         for spec in query_specs:
             query_results.append(await _run_query(spec))
             await asyncio.sleep(max(float(os.getenv("XHS_QUERY_GAP_SECONDS", "0.6")), 0.1))
-    merged_notes: list[dict[str, Any]] = []
+    merged_notes: list[dict[str, Any]] = [*db_notes]
+    seen_note_ids: set[str] = set()
+    for note in db_notes:
+        note_id = str(note.get("note_id") or "").strip()
+        if note_id:
+            seen_note_ids.add(note_id)
+    live_added_count = 0
     for result in query_results:
         for note in result.get("notes", []):
+            note_id = str(note.get("note_id") or "").strip()
+            if note_id and note_id in seen_note_ids:
+                continue
             merged_notes.append(
                 {
                     **note,
@@ -361,19 +386,44 @@ async def search_and_poll_notes(
                     "source": result.get("source"),
                 }
             )
+            if note_id:
+                seen_note_ids.add(note_id)
+            live_added_count += 1
+
+    merged_notes = merged_notes[:target_count]
+    final_db_count = min(len(db_notes), len(merged_notes))
+    final_live_count = max(len(merged_notes) - final_db_count, 0)
+    logger.info(
+        "xhs_source_mix_stats keyword=%s db_prefetch=%s live_added=%s final_db=%s final_live=%s final_total=%s target=%s",
+        main_keyword,
+        len(db_notes),
+        live_added_count,
+        final_db_count,
+        final_live_count,
+        len(merged_notes),
+        target_count,
+    )
 
     aggregate = {
         "ok": True,
         "params": {
             "topic": main_keyword,
             "requirements": clean_requirements,
-            "page_size": 8,
+            "page_size": topic_query_size,
             "sort": sort,
-            "sub_query_page_size": 2,
+            "sub_query_page_size": sub_query_size,
             "query_count": len(query_specs),
+            "db_prefetch_count": len(db_notes),
+            "need_count": need_count,
         },
         "notes": merged_notes,
     }
+    db_upsert_query_cache(main_keyword, aggregate, clean_requirements)
+    logger.info(
+        "xhs_db_upsert keyword=%s note_count=%s",
+        main_keyword,
+        len(merged_notes),
+    )
     if _should_persist_search_json():
         output_file = _keyword_output_path(main_keyword)
         with open(output_file, "w", encoding="utf-8") as f:
