@@ -24,3 +24,7 @@ build/
 # Generated search outputs at repo root
 /xhs_search_*.json
 /xhs_search_details_poll.json
+
+# Local runtime data (do not commit)
+/mcp_server/data/
+/mcp_server/json/

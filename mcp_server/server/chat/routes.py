@@ -41,29 +41,10 @@ def _sse(event: str, data: Any) -> bytes:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
 
 
-def _resolve_system_prompt(agent: str | None, preprocess: dict[str, Any]) -> str:
-    custom_prompt = preprocess.get("system_prompt")
-    if isinstance(custom_prompt, str) and custom_prompt.strip():
-        return custom_prompt.strip()
+def _resolve_system_prompt(agent: str | None) -> str:
     if isinstance(agent, str) and agent.strip():
         return AGENT_SYSTEM_PROMPTS.get(agent.strip(), DEFAULT_SYSTEM_PROMPT)
     return DEFAULT_SYSTEM_PROMPT
-
-
-async def _call_optional_webhook(url: str | None, payload: dict[str, Any], timeout_sec: float = 8.0) -> dict[str, Any]:
-    if not url:
-        return {}
-    try:
-        async with httpx.AsyncClient(timeout=timeout_sec) as client:
-            resp = await client.post(url, json=payload)
-            if not resp.is_success:
-                return {"ok": False, "error": f"webhook status={resp.status_code}", "raw": resp.text}
-            data = resp.json()
-            if isinstance(data, dict):
-                return data
-            return {"ok": True, "value": data}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
 
 
 def _extract_last_user_message(messages: list[dict[str, Any]]) -> str:
@@ -310,8 +291,6 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
             yield _sse("end", {"ok": False})
         return StreamingResponse(missing_key_stream(), media_type="text/event-stream")
 
-    preprocess_url = os.getenv("N8N_PREPROCESS_WEBHOOK_URL", "").strip() or None
-    postprocess_url = os.getenv("N8N_POSTPROCESS_WEBHOOK_URL", "").strip() or None
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
     async def event_stream():
@@ -323,18 +302,8 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
             body.agent,
             len(body.messages),
         )
-        preprocess = await _call_optional_webhook(
-            preprocess_url,
-            {"agent": body.agent, "messages": [m.model_dump() for m in body.messages], "workflow": body.workflow},
-        )
-        user_prefix = preprocess.get("user_prompt_prefix", "")
         working_messages = [m.model_dump() for m in body.messages]
-        if isinstance(user_prefix, str) and user_prefix.strip():
-            for idx in range(len(working_messages) - 1, -1, -1):
-                if working_messages[idx].get("role") == "user":
-                    working_messages[idx]["content"] = f"{user_prefix.strip()}\n\n{working_messages[idx].get('content', '')}"
-                    break
-        system_prompt = _resolve_system_prompt(body.agent, preprocess)
+        system_prompt = _resolve_system_prompt(body.agent)
         final_messages = [{"role": "system", "content": system_prompt}, *working_messages]
 
         if (body.agent or "").strip() == "xiaohongshu":
@@ -441,7 +410,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
         payload = {"model": model, "stream": True, "messages": final_messages}
 
         full_text_parts: list[str] = []
-        yield _sse("connected", {"model": model, "preprocess_ok": preprocess.get("ok", True)})
+        yield _sse("connected", {"model": model})
 
         try:
             async with httpx.AsyncClient(timeout=None) as client:
@@ -506,18 +475,5 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
             )
         logger.info("chat_stream_end trace_id=%s ok=%s", trace_id, True)
         yield _sse("end", end_payload)
-
-        if postprocess_url:
-            asyncio.create_task(
-                _call_optional_webhook(
-                    postprocess_url,
-                    {
-                        "agent": body.agent,
-                        "workflow": body.workflow,
-                        "messages": [m.model_dump() for m in body.messages],
-                        "final_content": final_text,
-                    },
-                )
-            )
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

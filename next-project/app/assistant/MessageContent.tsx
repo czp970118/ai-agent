@@ -157,7 +157,7 @@ export default function MessageContent({ role, content, isStreaming = false }: P
     return (
       <div
         className={`${htmlRichClass} ${isStreaming ? "thinking-shimmer" : ""}`}
-        // 已由 DOMPurify 消毒；内容来自自建 n8n 工作流
+        // 已由 DOMPurify 消毒；内容来自后端服务
         dangerouslySetInnerHTML={{ __html: safe }}
       />
     );

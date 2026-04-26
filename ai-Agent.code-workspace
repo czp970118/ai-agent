@@ -1,8 +1,7 @@
 {
   "folders": [
     { "path": "mcp_server", "name": "mcp_server" },
-    { "path": "next-project", "name": "next-project" },
-    { "path": "n8n-local", "name": "n8n-local" }
+    { "path": "next-project", "name": "next-project" }
   ],
   "settings": {
     "python.defaultInterpreterPath": "${workspaceFolder:mcp_server}/.venv/bin/python"

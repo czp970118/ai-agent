@@ -36,5 +36,3 @@ python -m uvicorn main:http_app --host 127.0.0.1 --port 8000
 参考 `.env.example`，重点变量：
 - `DEEPSEEK_API_KEY`
 - `DEEPSEEK_MODEL`
-- `N8N_PREPROCESS_WEBHOOK_URL`
-- `N8N_POSTPROCESS_WEBHOOK_URL`

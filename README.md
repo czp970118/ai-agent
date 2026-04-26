@@ -6,7 +6,6 @@
 
 - `next-project`：Next.js 前端项目。
 - `mcp_server`：FastAPI 网关与业务服务。
-- `n8n-local`：本地工作流与相关依赖配置。
 
 ## 快速开始
 
@@ -45,5 +44,3 @@ python -m uvicorn main:http_app --host 127.0.0.1 --port 8000
 
 - `DEEPSEEK_API_KEY`
 - `DEEPSEEK_MODEL`
-- `N8N_PREPROCESS_WEBHOOK_URL`
-- `N8N_POSTPROCESS_WEBHOOK_URL`

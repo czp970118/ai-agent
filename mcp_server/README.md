@@ -3,7 +3,6 @@
 `mcp_server` 是当前项目的 Python HTTP 网关，负责：
 - 暴露对外 API（聊天流式 + 搜索聚合）
 - 对接 DeepSeek 流式生成
-- 通过可选 webhook 与 n8n 做轻量预处理/后处理协同
 
 ## 目录结构
 
@@ -66,8 +65,6 @@ mcp_server/
 
 - `DEEPSEEK_API_KEY`：必填，`/chat/stream` 依赖
 - `DEEPSEEK_MODEL`：可选，默认 `deepseek-chat`
-- `N8N_PREPROCESS_WEBHOOK_URL`：可选，预处理 webhook
-- `N8N_POSTPROCESS_WEBHOOK_URL`：可选，后处理 webhook
 - `XHS_STORAGE_STATE`：可选，默认 `server/xhs/xhs_storage_state.json`
 - `QCC_STORAGE_STATE`：可选，默认 `server/qcc/qcc_storage_state.json`
 
