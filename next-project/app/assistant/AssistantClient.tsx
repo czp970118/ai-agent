@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useCallback, useState, useRef, useEffect } from "react";
+import React, { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { flushSync } from "react-dom";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ListBox, ListBoxItem, Select } from "@heroui/react";
-import { AGENTS, type AgentId, agentUi } from "./agents";
+import { type AgentId, agentUi } from "./agents";
 import AssistantComposer from "./AssistantComposer";
 import AssistantMessageList from "./AssistantMessageList";
 import { copyMessageToClipboard } from "./utils/clipboard";
@@ -39,8 +38,17 @@ type Props = {
   agentId: AgentId;
 };
 
+type PromptStyle = {
+  id: string;
+  name: string;
+  body?: string;
+  body_preview?: string;
+  is_default?: boolean;
+};
+
+const DOMAIN_OPTIONS = ["旅游", "考公", "穿搭", "吃喝", "职场", "健身", "情感"] as const;
+
 export default function AssistantClient({ agentId }: Props) {
-  const router = useRouter();
   const isXHS = agentId === "xiaohongshu";
   const uiColor = isXHS ? "danger" : "success";
   const fieldThemeClass = isXHS
@@ -60,6 +68,11 @@ export default function AssistantClient({ agentId }: Props) {
   const [topic, setTopic] = useState("");
   const [requirements, setRequirements] = useState("");
   const [autoImage, setAutoImage] = useState(false);
+  const [currentDomainStyles, setCurrentDomainStyles] = useState<PromptStyle[]>([]);
+  const [selectedDomain, setSelectedDomain] = useState("旅游");
+  const [selectedPromptId, setSelectedPromptId] = useState("");
+  const [loadingDomainPrompts, setLoadingDomainPrompts] = useState(false);
+  const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const copyMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,6 +91,76 @@ export default function AssistantClient({ agentId }: Props) {
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const selectedPrompt = useMemo(() => {
+    return currentDomainStyles.find((item) => item.id === selectedPromptId) ?? null;
+  }, [currentDomainStyles, selectedPromptId]);
+  const defaultPrompt = useMemo(() => {
+    return currentDomainStyles.find((item) => !!item.is_default) ?? currentDomainStyles[0] ?? null;
+  }, [currentDomainStyles]);
+  const promptTagLabel = useMemo(() => {
+    if (loadingDomainPrompts) return "提示词加载中...";
+    if (selectedPrompt?.name) return selectedPrompt.name;
+    if (defaultPrompt?.name) return defaultPrompt.name;
+    return "暂无提示词";
+  }, [loadingDomainPrompts, selectedPrompt, defaultPrompt]);
+
+  const selectedPromptBody = String(selectedPrompt?.body ?? selectedPrompt?.body_preview ?? "").trim();
+
+  useEffect(() => {
+    setSelectedDomain("旅游");
+    setSelectedPromptId("");
+  }, [agentId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDomainStyles() {
+      if (!selectedDomain.trim()) {
+        setCurrentDomainStyles([]);
+        setSelectedPromptId("");
+        setLoadingDomainPrompts(false);
+        return;
+      }
+      setLoadingDomainPrompts(true);
+      try {
+        const res = await fetch(
+          `${getMcpBaseUrl()}/chat/prompt-library?agent=${encodeURIComponent(
+            agentId
+          )}&domain=${encodeURIComponent(selectedDomain)}&include_body=true`
+        );
+        if (!res.ok) {
+          if (!cancelled) setCurrentDomainStyles([]);
+          return;
+        }
+        const payload = (await res.json()) as {
+          categories?: Array<{ styles?: PromptStyle[] }>;
+        };
+        const categories = Array.isArray(payload.categories) ? payload.categories : [];
+        const styles = categories[0]?.styles ?? [];
+        if (cancelled) return;
+        setCurrentDomainStyles(styles);
+      } catch {
+        if (cancelled) return;
+        setCurrentDomainStyles([]);
+      } finally {
+        if (!cancelled) setLoadingDomainPrompts(false);
+      }
+    }
+    void loadDomainStyles();
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, selectedDomain]);
+
+  useEffect(() => {
+    if (!currentDomainStyles.length) {
+      setSelectedPromptId("");
+      return;
+    }
+    if (currentDomainStyles.some((item) => item.id === selectedPromptId)) return;
+    const defaultPrompt = currentDomainStyles.find((item) => !!item.is_default) ?? currentDomainStyles[0] ?? null;
+    setSelectedPromptId(defaultPrompt?.id ?? "");
+  }, [currentDomainStyles, selectedPromptId]);
 
   async function copyMessageCard(msg: Message) {
     const ok = await copyMessageToClipboard(msg);
@@ -584,12 +667,48 @@ export default function AssistantClient({ agentId }: Props) {
         requirements: requirementsValue,
         autoImage,
         prompt: text,
+        prompt_domain: selectedDomain || undefined,
+        prompt_domains: selectedDomain ? [selectedDomain] : [],
+        prompt_style_id: selectedPromptId || undefined,
+        prompt_style_name: selectedPrompt?.name || undefined,
+        prompt_candidates: currentDomainStyles.map((item) => ({
+          id: item.id,
+          name: item.name,
+          is_default: !!item.is_default,
+          body: String(item.body ?? item.body_preview ?? ""),
+        })),
       };
     } else if (isXHS) {
       workflowPayload = {
         agent: agentId,
         mode: "default",
         prompt: text,
+        prompt_domain: selectedDomain || undefined,
+        prompt_domains: selectedDomain ? [selectedDomain] : [],
+        prompt_style_id: selectedPromptId || undefined,
+        prompt_style_name: selectedPrompt?.name || undefined,
+        prompt_candidates: currentDomainStyles.map((item) => ({
+          id: item.id,
+          name: item.name,
+          is_default: !!item.is_default,
+          body: String(item.body ?? item.body_preview ?? ""),
+        })),
+      };
+    } else {
+      workflowPayload = {
+        agent: agentId,
+        mode: "default",
+        prompt: text,
+        prompt_domain: selectedDomain || undefined,
+        prompt_domains: selectedDomain ? [selectedDomain] : [],
+        prompt_style_id: selectedPromptId || undefined,
+        prompt_style_name: selectedPrompt?.name || undefined,
+        prompt_candidates: currentDomainStyles.map((item) => ({
+          id: item.id,
+          name: item.name,
+          is_default: !!item.is_default,
+          body: String(item.body ?? item.body_preview ?? ""),
+        })),
       };
     }
     if (!text) return;
@@ -702,15 +821,10 @@ export default function AssistantClient({ agentId }: Props) {
           </p>
           <div className="w-32 shrink-0">
             <Select
-              aria-label="切换 AI"
+              aria-label="切换领域"
               variant="secondary"
-              selectedKey={agentId}
-              onSelectionChange={(key) => {
-                const nextAgent = String(key) as AgentId;
-                if (nextAgent !== agentId) {
-                  router.push(`/assistant/${nextAgent}`);
-                }
-              }}
+              selectedKey={selectedDomain || undefined}
+              onSelectionChange={(key) => setSelectedDomain(String(key))}
               className="w-full"
             >
               <Select.Trigger className="w-full">
@@ -718,10 +832,10 @@ export default function AssistantClient({ agentId }: Props) {
                 <Select.Indicator />
               </Select.Trigger>
               <Select.Popover>
-                <ListBox aria-label="Agent 列表">
-                  {AGENTS.map((id) => (
-                    <ListBoxItem id={id} key={id}>
-                      {agentUi[id].shortLabel}
+                <ListBox aria-label="领域列表">
+                  {DOMAIN_OPTIONS.map((item) => (
+                    <ListBoxItem id={item} key={item}>
+                      {item}
                     </ListBoxItem>
                   ))}
                 </ListBox>
@@ -783,6 +897,20 @@ export default function AssistantClient({ agentId }: Props) {
           topic={topic}
           requirements={requirements}
           autoImage={autoImage}
+          promptSwitchNode={
+            <button
+              type="button"
+              onClick={() => setPromptModalOpen(true)}
+              disabled={loadingDomainPrompts || currentDomainStyles.length === 0}
+              className={`inline-flex items-center gap-2 rounded-[10px] border px-3.5 py-2 text-sm font-medium shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 dark:shadow-none ${
+                selectedPrompt
+                  ? "border-slate-200/90 bg-white text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700/60"
+                  : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-300"
+              }`}
+            >
+              {promptTagLabel}
+            </button>
+          }
           quotedMessage={quotedMessage}
           onToggleStandardMode={() => setStandardMode((v) => !v)}
           onInputChange={setInput}
@@ -794,6 +922,43 @@ export default function AssistantClient({ agentId }: Props) {
           onStop={stopInFlight}
         />
       </main>
+      {promptModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">切换提示词</p>
+              <button
+                className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                onClick={() => setPromptModalOpen(false)}
+              >
+                关闭
+              </button>
+            </div>
+            <div className="grid gap-2">
+              {currentDomainStyles.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPromptId(item.id);
+                    setPromptModalOpen(false);
+                  }}
+                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                    item.id === selectedPromptId
+                      ? "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/60 dark:bg-rose-950/40 dark:text-rose-100"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {item.is_default ? `默认 · ${item.name}` : item.name}
+                </button>
+              ))}
+              {!currentDomainStyles.length ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">当前领域暂无可用提示词</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

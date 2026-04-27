@@ -15,6 +15,7 @@ type Props = {
   topic: string;
   requirements: string;
   autoImage: boolean;
+  promptSwitchNode?: React.ReactNode;
   quotedMessage: Message | null;
   onToggleStandardMode: () => void;
   onInputChange: (value: string) => void;
@@ -52,6 +53,7 @@ export default function AssistantComposer({
   topic,
   requirements,
   autoImage,
+  promptSwitchNode,
   quotedMessage,
   onToggleStandardMode,
   onInputChange,
@@ -68,7 +70,8 @@ export default function AssistantComposer({
       className="shrink-0 bg-transparent px-4 pt-3 pb-[max(14px,env(safe-area-inset-bottom))] sm:px-5"
     >
       {isXHS && (
-        <div className="mb-3 flex flex-wrap gap-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {promptSwitchNode}
           <button
             type="button"
             disabled={loading}

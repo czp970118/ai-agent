@@ -21,6 +21,7 @@ class UpdateCachedNoteRequest(BaseModel):
     title: str = Field(default="", min_length=0)
     content_text: str = Field(default="", min_length=0)
     tags: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
 
 
 @search_router.post("/poll")
@@ -60,10 +61,19 @@ async def post_search_poll(body: SearchPollRequest) -> dict:
 async def get_cache_notes(
     keyword: str = Query("", min_length=0),
     tag: str = Query("", min_length=0),
+    domain: list[str] = Query(default=[]),
+    sort_by: str = Query("", min_length=0),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> dict:
-    return db_list_cached_notes(keyword=keyword, tag=tag, limit=limit, offset=offset)
+    return db_list_cached_notes(
+        keyword=keyword,
+        tag=tag,
+        domains=domain,
+        sort_by=sort_by,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @search_router.get("/cache/notes/{note_id}")
@@ -81,6 +91,7 @@ async def patch_cache_note_detail(note_id: str, body: UpdateCachedNoteRequest) -
         title=str(body.title or "").strip(),
         content_text=str(body.content_text or "").strip(),
         tags=body.tags,
+        domains=body.domains,
     )
     if item is None:
         raise HTTPException(status_code=404, detail="note not found")

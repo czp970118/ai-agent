@@ -173,8 +173,7 @@ async def fetch_search_notes_via_browser(keyword: str, timeout_seconds: float = 
                         value = str(post_json.get(key) or "").strip().lower()
                         if value and (keyword_lower in value or value in keyword_lower):
                             return True
-                # 兜底：命中搜索接口即接受，避免因关键词匹配细节导致整次超时。
-                return True
+                return False
 
             async with page.expect_response(
                 _is_target_search_response,

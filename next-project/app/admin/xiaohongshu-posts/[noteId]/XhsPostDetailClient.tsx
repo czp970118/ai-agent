@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { TagGroup } from "@heroui/react";
 import { adminFormStyles as ui } from "../../components/formStyles";
 
 type NoteDetail = {
@@ -35,15 +34,15 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
   const [note, setNote] = useState<NoteDetail | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [tagsText, setTagsText] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState("");
 
-  const parsedTags = useMemo(
+  const normalizedTags = useMemo(
     () =>
-      tagsText
-        .split(",")
+      tags
         .map((item) => item.trim())
         .filter(Boolean),
-    [tagsText]
+    [tags]
   );
 
   const loadDetail = useCallback(async () => {
@@ -57,7 +56,7 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
       setNote(data.item);
       setTitle(data.item.title || "");
       setContent(data.item.content_text || "");
-      setTagsText((data.item.tags ?? []).join(", "));
+      setTags(data.item.tags ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {
@@ -77,7 +76,7 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
       const res = await fetch(`${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(noteId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), content_text: content.trim(), tags: parsedTags }),
+        body: JSON.stringify({ title: title.trim(), content_text: content.trim(), tags: normalizedTags }),
       });
       if (!res.ok) throw new Error(await res.text());
       await loadDetail();
@@ -88,11 +87,21 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
     }
   }
 
+  function removeTag(index: number) {
+    setTags((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function addTag() {
+    const value = newTag.trim();
+    if (!value) return;
+    setTags((prev) => [...prev, value]);
+    setNewTag("");
+  }
+
   return (
     <section className={ui.page}>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className={ui.title}>{readonly ? "帖子详情" : "编辑帖子"}</h1>
-        <button className={ui.buttonSecondary} onClick={() => router.push("/admin/xiaohongshu-posts")}>
+      <div className="mb-4">
+        <button className={ui.buttonSecondary} type="button" onClick={() => router.push("/admin/xiaohongshu-posts")}>
           返回列表
         </button>
       </div>
@@ -108,50 +117,120 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
             void saveNote();
           }}
         >
-          <div className={ui.panel}>
-            <p className={ui.sectionTitle}>基础信息</p>
-            <div className="grid gap-2">
-              <input className={ui.input} value={note.note_id} disabled />
-              <input className={ui.input} value={note.url} disabled />
-              <input
-                className={ui.input}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="标题"
-                disabled={readonly}
-              />
-              <textarea
-                className={`min-h-40 ${ui.textarea}`}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="内容"
-                disabled={readonly}
-              />
-              <input
-                className={ui.input}
-                value={tagsText}
-                onChange={(e) => setTagsText(e.target.value)}
-                placeholder="标签，使用英文逗号分隔"
-                disabled={readonly}
-              />
-              <TagGroup aria-label="标签预览" className="flex flex-wrap gap-1">
-                {parsedTags.map((item) => (
-                  <span
-                    key={item}
-                    className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+              <div>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{readonly ? "帖子详情" : "编辑帖子"}</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">仅标题、正文、标签可编辑</p>
+              </div>
+              <div className="flex gap-2" aria-label="统计信息">
+                <span className="inline-flex whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  使用 {note.used_count}
+                </span>
+                <span className="inline-flex whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  更新 {note.updated_at || "-"}
+                </span>
+              </div>
+            </div>
+            <div className="grid gap-5 p-5">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <label className="grid gap-1.5">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">帖子 ID（只读）</span>
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                    {note.note_id}
+                  </p>
+                </label>
+                <label className="grid gap-1.5">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">链接（只读）</span>
+                  <a
+                    href={note.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block truncate rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-sky-700 underline-offset-2 hover:underline dark:border-slate-700 dark:bg-slate-900 dark:text-sky-300"
+                    title={note.url}
                   >
-                    {item}
-                  </span>
-                ))}
-              </TagGroup>
-              <p className={ui.hint}>
-                使用次数：{note.used_count} | 更新时间：{note.updated_at || "-"}
-              </p>
+                    {note.url}
+                  </a>
+                </label>
+              </div>
+
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">标题</span>
+                <input
+                  className={ui.input}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="标题"
+                  disabled={readonly}
+                />
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">正文</span>
+                <textarea
+                  rows={22}
+                  className={`min-h-[560px] ${ui.textarea}`}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="内容"
+                  disabled={readonly}
+                />
+              </label>
+              <div>
+                <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">标签</p>
+                <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+                  {tags.length ? (
+                    <div aria-label="可编辑标签列表" className="mb-3 flex flex-wrap gap-2">
+                      {tags.map((item, index) => (
+                        <span
+                          key={`${index}-${item}`}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          {item}
+                          {!readonly ? (
+                            <button
+                              type="button"
+                              onClick={() => removeTag(index)}
+                              className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 p-0 text-[10px] leading-none text-white transition hover:bg-rose-500"
+                            >
+                              ×
+                            </button>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className={`${ui.hint} mb-3`}>暂无标签</p>
+                  )}
+
+                  {!readonly ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        className={ui.input}
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        placeholder="输入新标签"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addTag();
+                          }
+                        }}
+                      />
+                      <button className={ui.buttonSecondary} type="button" onClick={addTag}>
+                        新增标签
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </div>
 
           {!readonly ? (
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+              <button className={ui.buttonSecondary} type="button" onClick={() => router.push("/admin/xiaohongshu-posts")}>
+                取消
+              </button>
               <button className={ui.buttonPrimary} type="submit" disabled={saving}>
                 {saving ? "保存中..." : "保存修改"}
               </button>

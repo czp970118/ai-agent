@@ -254,6 +254,7 @@ async def search_and_poll_notes(
     page_size: int = 20,
     sort: str = "general",
     requirements: list[str] | None = None,
+    domains: list[str] | None = None,
 ) -> str:
     """关键词搜索后轮询详情，支持主题词 + 需求词组合搜索并合并结果。"""
     poll_count = max(int(os.getenv("XHS_POLL_COUNT", "2")), 1)
@@ -271,7 +272,17 @@ async def search_and_poll_notes(
         if req_text and req_text not in clean_requirements:
             clean_requirements.append(req_text)
     target_count = max(int(page_size), 1)
-    db_payload = db_fetch_cached_payload(main_keyword, clean_requirements, target_count=target_count)
+    clean_domains: list[str] = []
+    for d in domains or []:
+        text = str(d or "").strip()
+        if text and text not in clean_domains:
+            clean_domains.append(text)
+    db_payload = db_fetch_cached_payload(
+        main_keyword,
+        clean_requirements,
+        target_count=target_count,
+        domains=clean_domains,
+    )
     db_notes: list[dict[str, Any]] = []
     if isinstance(db_payload, dict):
         payload_notes = db_payload.get("notes")
@@ -409,6 +420,7 @@ async def search_and_poll_notes(
         "params": {
             "topic": main_keyword,
             "requirements": clean_requirements,
+            "domains": clean_domains,
             "page_size": topic_query_size,
             "sort": sort,
             "sub_query_page_size": sub_query_size,
@@ -418,7 +430,7 @@ async def search_and_poll_notes(
         },
         "notes": merged_notes,
     }
-    db_upsert_query_cache(main_keyword, aggregate, clean_requirements)
+    db_upsert_query_cache(main_keyword, aggregate, clean_requirements, domains=clean_domains)
     logger.info(
         "xhs_db_upsert keyword=%s note_count=%s",
         main_keyword,

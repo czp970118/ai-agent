@@ -2,18 +2,20 @@ import sqlite3
 from typing import Any
 from uuid import uuid4
 
-from .chat_memory_db import normalize_user_id, utc_now_iso
-from .memory_store import _db_path, _init_db
+from .chat_memory_db import init_chat_memory_db, utc_now_iso
+from .memory_store import _db_path
 
 _NAME_MAX = 128
 _BODY_MAX = 512_000
+
+_CATEGORY_ID_SEP = "::"
 
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(_db_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    _init_db(conn)
+    init_chat_memory_db(conn)
     return conn
 
 
@@ -24,8 +26,23 @@ def _preview(body: str, limit: int = 160) -> str:
     return text[:limit] + "…"
 
 
+def _encode_category_id(agent: str, domain: str) -> str:
+    return f"{agent.strip()}{_CATEGORY_ID_SEP}{domain.strip()}"
+
+
+def _decode_category_id(category_id: str) -> tuple[str, str]:
+    raw = str(category_id or "").strip()
+    if _CATEGORY_ID_SEP not in raw:
+        raise ValueError("category_id 无效")
+    agent, domain = raw.split(_CATEGORY_ID_SEP, 1)
+    aid = agent.strip()
+    d = domain.strip()
+    if not aid or not d:
+        raise ValueError("category_id 无效")
+    return aid, d
+
+
 def fetch_style_body(*, user_id: str, agent: str, style_id: str) -> str | None:
-    uid = normalize_user_id(user_id)
     aid = str(agent or "").strip()
     sid = str(style_id or "").strip()
     if not aid or not sid:
@@ -33,12 +50,11 @@ def fetch_style_body(*, user_id: str, agent: str, style_id: str) -> str | None:
     with _connect() as conn:
         row = conn.execute(
             """
-            SELECT s.body AS body
-            FROM prompt_styles s
-            JOIN prompt_categories c ON c.id = s.category_id
-            WHERE s.id = ? AND c.user_id = ? AND c.agent = ?
+            SELECT content AS body
+            FROM prompt_templates
+            WHERE id = ? AND agent = ?
             """,
-            (sid, uid, aid),
+            (sid, aid),
         ).fetchone()
         if row is None:
             return None
@@ -46,58 +62,67 @@ def fetch_style_body(*, user_id: str, agent: str, style_id: str) -> str | None:
         return body or None
 
 
-def list_prompt_library(*, user_id: str, agent: str, include_body: bool = False) -> dict[str, Any]:
-    uid = normalize_user_id(user_id)
+def list_prompt_library(*, user_id: str, agent: str, include_body: bool = False, domain: str = "") -> dict[str, Any]:
     aid = str(agent or "").strip()
+    d = str(domain or "").strip()
     if not aid:
         raise ValueError("agent 不能为空")
     with _connect() as conn:
-        cats = conn.execute(
-            """
-            SELECT id, name, sort_order, created_at, updated_at
-            FROM prompt_categories
-            WHERE user_id = ? AND agent = ?
-            ORDER BY sort_order ASC, created_at ASC
-            """,
-            (uid, aid),
-        ).fetchall()
-        out_categories: list[dict[str, Any]] = []
-        for c in cats:
-            cid = str(c["id"])
-            styles = conn.execute(
+        if d:
+            rows = conn.execute(
                 """
-                SELECT id, name, sort_order, created_at, updated_at, body
-                FROM prompt_styles
-                WHERE category_id = ?
-                ORDER BY sort_order ASC, created_at ASC
+                SELECT id, domain, name, content, is_default, created_at, updated_at
+                FROM prompt_templates
+                WHERE agent = ? AND domain = ?
+                ORDER BY domain ASC, created_at ASC
                 """,
-                (cid,),
+                (aid, d),
             ).fetchall()
-            style_list: list[dict[str, Any]] = []
-            for s in styles:
-                body = str(s["body"] or "")
-                item: dict[str, Any] = {
-                    "id": str(s["id"]),
-                    "name": str(s["name"]),
-                    "sort_order": int(s["sort_order"] or 0),
-                    "created_at": str(s["created_at"]),
-                    "updated_at": str(s["updated_at"]),
-                    "body_preview": _preview(body),
-                }
-                if include_body:
-                    item["body"] = body
-                style_list.append(item)
-            out_categories.append(
-                {
-                    "id": cid,
-                    "name": str(c["name"]),
-                    "sort_order": int(c["sort_order"] or 0),
-                    "created_at": str(c["created_at"]),
-                    "updated_at": str(c["updated_at"]),
-                    "styles": style_list,
-                }
-            )
-        return {"categories": out_categories}
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, domain, name, content, is_default, created_at, updated_at
+                FROM prompt_templates
+                WHERE agent = ?
+                ORDER BY domain ASC, created_at ASC
+                """,
+                (aid,),
+            ).fetchall()
+    grouped: dict[str, list[sqlite3.Row]] = {}
+    for row in rows:
+        domain = str(row["domain"] or "").strip()
+        if not domain:
+            continue
+        grouped.setdefault(domain, []).append(row)
+    out_categories: list[dict[str, Any]] = []
+    for domain, domain_rows in grouped.items():
+        style_list: list[dict[str, Any]] = []
+        for s in domain_rows:
+            body = str(s["content"] or "")
+            item: dict[str, Any] = {
+                "id": str(s["id"]),
+                "name": str(s["name"]),
+                "sort_order": 0,
+                "is_default": bool(int(s["is_default"] or 0)),
+                "created_at": str(s["created_at"]),
+                "updated_at": str(s["updated_at"]),
+                "body_preview": _preview(body),
+            }
+            if include_body:
+                item["body"] = body
+            style_list.append(item)
+        first = domain_rows[0]
+        out_categories.append(
+            {
+                "id": _encode_category_id(aid, domain),
+                "name": domain,
+                "sort_order": 0,
+                "created_at": str(first["created_at"]),
+                "updated_at": str(first["updated_at"]),
+                "styles": style_list,
+            }
+        )
+    return {"categories": out_categories}
 
 
 def _clamp_name(name: str) -> str:
@@ -117,27 +142,20 @@ def _clamp_body(body: str) -> str:
 
 
 def create_category(*, user_id: str, agent: str, name: str, sort_order: int | None = None) -> dict[str, Any]:
-    uid = normalize_user_id(user_id)
     aid = str(agent or "").strip()
     if not aid:
         raise ValueError("agent 不能为空")
     nm = _clamp_name(name)
     now = utc_now_iso()
-    cid = str(uuid4())
-    so = 0 if sort_order is None else int(sort_order)
-    with _connect() as conn:
-        try:
-            conn.execute(
-                """
-                INSERT INTO prompt_categories (id, user_id, agent, name, sort_order, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (cid, uid, aid, nm, so, now, now),
-            )
-            conn.commit()
-        except sqlite3.IntegrityError as exc:
-            raise ValueError("分类名称已存在") from exc
-    return {"id": cid, "user_id": uid, "agent": aid, "name": nm, "sort_order": so, "created_at": now, "updated_at": now}
+    category_id = _encode_category_id(aid, nm)
+    return {
+        "id": category_id,
+        "agent": aid,
+        "name": nm,
+        "sort_order": 0 if sort_order is None else int(sort_order),
+        "created_at": now,
+        "updated_at": now,
+    }
 
 
 def update_category(
@@ -147,68 +165,45 @@ def update_category(
     name: str | None = None,
     sort_order: int | None = None,
 ) -> dict[str, Any]:
-    uid = normalize_user_id(user_id)
-    cid = str(category_id or "").strip()
-    if not cid:
-        raise ValueError("category_id 无效")
-    fields: list[str] = []
-    params: list[Any] = []
-    if name is not None:
-        fields.append("name = ?")
-        params.append(_clamp_name(name))
-    if sort_order is not None:
-        fields.append("sort_order = ?")
-        params.append(int(sort_order))
-    if not fields:
+    aid, old_domain = _decode_category_id(category_id)
+    new_domain = _clamp_name(name) if name is not None else old_domain
+    if new_domain == old_domain and sort_order is None:
         raise ValueError("没有可更新字段")
     now = utc_now_iso()
-    fields.append("updated_at = ?")
-    params.append(now)
-    params.extend([cid, uid])
-    row: sqlite3.Row | None = None
     with _connect() as conn:
         try:
             cur = conn.execute(
-                f"UPDATE prompt_categories SET {', '.join(fields)} WHERE id = ? AND user_id = ?",
-                params,
-            )
-            if cur.rowcount != 1:
-                raise ValueError("分类不存在")
-            row = conn.execute(
                 """
-                SELECT id, user_id, agent, name, sort_order, created_at, updated_at
-                FROM prompt_categories WHERE id = ?
+                UPDATE prompt_templates
+                SET domain = ?, updated_at = ?
+                WHERE agent = ? AND domain = ?
                 """,
-                (cid,),
-            ).fetchone()
+                (new_domain, now, aid, old_domain),
+            )
+            if cur.rowcount < 1:
+                raise ValueError("分类不存在")
         except sqlite3.IntegrityError as exc:
             raise ValueError("分类名称已存在") from exc
         conn.commit()
-    if row is None:
-        raise ValueError("分类不存在")
     return {
-        "id": str(row["id"]),
-        "user_id": str(row["user_id"]),
-        "agent": str(row["agent"]),
-        "name": str(row["name"]),
-        "sort_order": int(row["sort_order"] or 0),
-        "created_at": str(row["created_at"]),
-        "updated_at": str(row["updated_at"]),
+        "id": _encode_category_id(aid, new_domain),
+        "agent": aid,
+        "name": new_domain,
+        "sort_order": 0 if sort_order is None else int(sort_order),
+        "created_at": now,
+        "updated_at": now,
     }
 
 
 def delete_category(*, user_id: str, category_id: str) -> None:
-    uid = normalize_user_id(user_id)
-    cid = str(category_id or "").strip()
-    if not cid:
-        raise ValueError("category_id 无效")
+    aid, domain = _decode_category_id(category_id)
     with _connect() as conn:
         cur = conn.execute(
-            "DELETE FROM prompt_categories WHERE id = ? AND user_id = ?",
-            (cid, uid),
+            "DELETE FROM prompt_templates WHERE agent = ? AND domain = ?",
+            (aid, domain),
         )
         conn.commit()
-        if cur.rowcount != 1:
+        if cur.rowcount < 1:
             raise ValueError("分类不存在")
 
 
@@ -218,40 +213,42 @@ def create_style(
     category_id: str,
     name: str,
     body: str,
+    is_default: bool = False,
     sort_order: int | None = None,
 ) -> dict[str, Any]:
-    uid = normalize_user_id(user_id)
-    cat_id = str(category_id or "").strip()
-    if not cat_id:
-        raise ValueError("category_id 无效")
+    aid, domain = _decode_category_id(category_id)
     nm = _clamp_name(name)
     bd = _clamp_body(body)
     now = utc_now_iso()
     sid = str(uuid4())
     so = 0 if sort_order is None else int(sort_order)
     with _connect() as conn:
-        row = conn.execute(
-            "SELECT id FROM prompt_categories WHERE id = ? AND user_id = ?",
-            (cat_id, uid),
-        ).fetchone()
-        if row is None:
-            raise ValueError("分类不存在")
         try:
+            if is_default:
+                conn.execute(
+                    """
+                    UPDATE prompt_templates
+                    SET is_default = 0, updated_at = ?
+                    WHERE agent = ? AND domain = ?
+                    """,
+                    (now, aid, domain),
+                )
             conn.execute(
                 """
-                INSERT INTO prompt_styles (id, category_id, name, body, sort_order, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO prompt_templates (id, user_id, agent, domain, name, content, is_default, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (sid, cat_id, nm, bd, so, now, now),
+                (sid, "__global__", aid, domain, nm, bd, 1 if is_default else 0, now, now),
             )
             conn.commit()
         except sqlite3.IntegrityError as exc:
             raise ValueError("该分类下风格名称已存在") from exc
     return {
         "id": sid,
-        "category_id": cat_id,
+        "category_id": _encode_category_id(aid, domain),
         "name": nm,
         "body": bd,
+        "is_default": bool(is_default),
         "sort_order": so,
         "created_at": now,
         "updated_at": now,
@@ -264,9 +261,9 @@ def update_style(
     style_id: str,
     name: str | None = None,
     body: str | None = None,
+    is_default: bool | None = None,
     sort_order: int | None = None,
 ) -> dict[str, Any]:
-    uid = normalize_user_id(user_id)
     sid = str(style_id or "").strip()
     if not sid:
         raise ValueError("style_id 无效")
@@ -278,24 +275,44 @@ def update_style(
     if body is not None:
         fields.append("body = ?")
         params.append(_clamp_body(body))
+    if is_default is not None:
+        fields.append("is_default = ?")
+        params.append(1 if is_default else 0)
     if sort_order is not None:
-        fields.append("sort_order = ?")
-        params.append(int(sort_order))
+        # 单表结构下暂不持久化排序字段，保持向后兼容但不报错。
+        pass
     if not fields:
         raise ValueError("没有可更新字段")
     now = utc_now_iso()
     fields.append("updated_at = ?")
     params.append(now)
-    params.extend([sid, uid])
+    params.append(sid)
     row: sqlite3.Row | None = None
     with _connect() as conn:
         try:
+            if is_default is True:
+                scope = conn.execute(
+                    """
+                    SELECT agent, domain FROM prompt_templates
+                    WHERE id = ?
+                    LIMIT 1
+                    """,
+                    (sid,),
+                ).fetchone()
+                if scope is None:
+                    raise ValueError("风格不存在")
+                conn.execute(
+                    """
+                    UPDATE prompt_templates
+                    SET is_default = 0, updated_at = ?
+                    WHERE agent = ? AND domain = ? AND id <> ?
+                    """,
+                    (now, str(scope["agent"]), str(scope["domain"]), sid),
+                )
             cur = conn.execute(
                 f"""
-                UPDATE prompt_styles SET {", ".join(fields)}
-                WHERE id = ? AND category_id IN (
-                    SELECT id FROM prompt_categories WHERE user_id = ?
-                )
+                UPDATE prompt_templates SET {", ".join(fields).replace("body", "content")}
+                WHERE id = ?
                 """,
                 params,
             )
@@ -303,12 +320,11 @@ def update_style(
                 raise ValueError("风格不存在")
             row = conn.execute(
                 """
-                SELECT s.id, s.category_id, s.name, s.body, s.sort_order, s.created_at, s.updated_at
-                FROM prompt_styles s
-                JOIN prompt_categories c ON c.id = s.category_id
-                WHERE s.id = ? AND c.user_id = ?
+                SELECT id, agent, domain, name, content, is_default, created_at, updated_at
+                FROM prompt_templates
+                WHERE id = ?
                 """,
-                (sid, uid),
+                (sid,),
             ).fetchone()
         except sqlite3.IntegrityError as exc:
             raise ValueError("该分类下风格名称已存在") from exc
@@ -317,29 +333,24 @@ def update_style(
         raise ValueError("风格不存在")
     return {
         "id": str(row["id"]),
-        "category_id": str(row["category_id"]),
+        "category_id": _encode_category_id(str(row["agent"]), str(row["domain"])),
         "name": str(row["name"]),
-        "body": str(row["body"]),
-        "sort_order": int(row["sort_order"] or 0),
+        "body": str(row["content"]),
+        "is_default": bool(int(row["is_default"] or 0)),
+        "sort_order": 0,
         "created_at": str(row["created_at"]),
         "updated_at": str(row["updated_at"]),
     }
 
 
 def delete_style(*, user_id: str, style_id: str) -> None:
-    uid = normalize_user_id(user_id)
     sid = str(style_id or "").strip()
     if not sid:
         raise ValueError("style_id 无效")
     with _connect() as conn:
         cur = conn.execute(
-            """
-            DELETE FROM prompt_styles
-            WHERE id = ? AND category_id IN (
-                SELECT id FROM prompt_categories WHERE user_id = ?
-            )
-            """,
-            (sid, uid),
+            "DELETE FROM prompt_templates WHERE id = ?",
+            (sid,),
         )
         conn.commit()
         if cur.rowcount != 1:

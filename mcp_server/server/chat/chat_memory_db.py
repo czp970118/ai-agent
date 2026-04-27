@@ -138,6 +138,42 @@ def init_chat_memory_db(conn: sqlite3.Connection) -> None:
         ON prompt_styles(category_id, sort_order ASC, created_at ASC)
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS prompt_templates (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            agent TEXT NOT NULL,
+            domain TEXT NOT NULL,
+            name TEXT NOT NULL,
+            content TEXT NOT NULL DEFAULT '',
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(user_id, agent, domain, name)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_prompt_templates_user_agent_domain
+        ON prompt_templates(user_id, agent, domain, updated_at DESC)
+        """
+    )
+    # 历史库升级：补齐 is_default 字段。
+    columns = {
+        str(row[1])  # pragma_table_info 第二列是 name
+        for row in conn.execute("PRAGMA table_info(prompt_templates)").fetchall()
+    }
+    if "is_default" not in columns:
+        conn.execute("ALTER TABLE prompt_templates ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_templates_one_default
+        ON prompt_templates(user_id, agent, domain)
+        WHERE is_default = 1
+        """
+    )
 
 
 def get_chat_memory_connection() -> sqlite3.Connection:

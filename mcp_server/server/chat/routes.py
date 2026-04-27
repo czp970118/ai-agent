@@ -71,30 +71,28 @@ class AppendConversationMessagesRequest(BaseModel):
 
 
 class PromptCategoryCreate(BaseModel):
-    user_id: str
     agent: str
     name: str
     sort_order: int | None = None
 
 
 class PromptCategoryPatch(BaseModel):
-    user_id: str
     name: str | None = None
     sort_order: int | None = None
 
 
 class PromptStyleCreate(BaseModel):
-    user_id: str
     category_id: str
     name: str
     body: str = ""
+    is_default: bool = False
     sort_order: int | None = None
 
 
 class PromptStylePatch(BaseModel):
-    user_id: str
     name: str | None = None
     body: str | None = None
+    is_default: bool | None = None
     sort_order: int | None = None
 
 
@@ -417,7 +415,19 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 "page_size": int(planned.get("page_size") or 15),
                 "sort": "general",
                 "requirements": planned.get("requirements") if isinstance(planned.get("requirements"), list) else [],
+                "domains": [],
             }
+            workflow_domains: list[str] = []
+            raw_prompt_domains = wf.get("prompt_domains")
+            if isinstance(raw_prompt_domains, list):
+                for d in raw_prompt_domains:
+                    text = str(d or "").strip()
+                    if text and text not in workflow_domains:
+                        workflow_domains.append(text)
+            raw_prompt_domain = str(wf.get("prompt_domain") or "").strip()
+            if raw_prompt_domain and raw_prompt_domain not in workflow_domains:
+                workflow_domains.append(raw_prompt_domain)
+            xhs_request_payload["domains"] = workflow_domains
             logger.info(
                 "xhs_api_request trace_id=%s payload=%s",
                 trace_id,
@@ -428,6 +438,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 page_size=xhs_request_payload["page_size"],
                 sort=xhs_request_payload["sort"],
                 requirements=xhs_request_payload["requirements"],
+                domains=xhs_request_payload["domains"],
             )
             logger.info("xhs_api_raw_response trace_id=%s preview=%s", trace_id, search_text[:3000])
             search_payload = _resolve_xhs_output(search_text)
@@ -614,12 +625,12 @@ async def post_conversation_messages(
 
 @chat_router.get("/prompt-library")
 async def get_prompt_library(
-    user_id: str = Query(..., min_length=1),
     agent: str = Query(..., min_length=1),
+    domain: str = Query(""),
     include_body: bool = Query(False),
 ) -> dict[str, Any]:
     try:
-        return list_prompt_library(user_id=user_id, agent=agent, include_body=include_body)
+        return list_prompt_library(user_id="__global__", agent=agent, include_body=include_body, domain=domain)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -628,7 +639,7 @@ async def get_prompt_library(
 async def post_prompt_library_category(body: PromptCategoryCreate) -> dict[str, Any]:
     try:
         return create_category(
-            user_id=body.user_id,
+            user_id="__global__",
             agent=body.agent,
             name=body.name,
             sort_order=body.sort_order,
@@ -641,7 +652,7 @@ async def post_prompt_library_category(body: PromptCategoryCreate) -> dict[str, 
 async def patch_prompt_library_category(category_id: str, body: PromptCategoryPatch) -> dict[str, Any]:
     try:
         return update_category(
-            user_id=body.user_id,
+            user_id="__global__",
             category_id=category_id,
             name=body.name,
             sort_order=body.sort_order,
@@ -653,10 +664,9 @@ async def patch_prompt_library_category(category_id: str, body: PromptCategoryPa
 @chat_router.delete("/prompt-library/categories/{category_id}")
 async def delete_prompt_library_category(
     category_id: str,
-    user_id: str = Query(..., min_length=1),
 ) -> dict[str, Any]:
     try:
-        delete_category(user_id=user_id, category_id=category_id)
+        delete_category(user_id="__global__", category_id=category_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}
@@ -666,10 +676,11 @@ async def delete_prompt_library_category(
 async def post_prompt_library_style(body: PromptStyleCreate) -> dict[str, Any]:
     try:
         return create_style(
-            user_id=body.user_id,
+            user_id="__global__",
             category_id=body.category_id,
             name=body.name,
             body=body.body,
+            is_default=body.is_default,
             sort_order=body.sort_order,
         )
     except ValueError as exc:
@@ -680,10 +691,11 @@ async def post_prompt_library_style(body: PromptStyleCreate) -> dict[str, Any]:
 async def patch_prompt_library_style(style_id: str, body: PromptStylePatch) -> dict[str, Any]:
     try:
         return update_style(
-            user_id=body.user_id,
+            user_id="__global__",
             style_id=style_id,
             name=body.name,
             body=body.body,
+            is_default=body.is_default,
             sort_order=body.sort_order,
         )
     except ValueError as exc:
@@ -693,10 +705,9 @@ async def patch_prompt_library_style(style_id: str, body: PromptStylePatch) -> d
 @chat_router.delete("/prompt-library/styles/{style_id}")
 async def delete_prompt_library_style(
     style_id: str,
-    user_id: str = Query(..., min_length=1),
 ) -> dict[str, Any]:
     try:
-        delete_style(user_id=user_id, style_id=style_id)
+        delete_style(user_id="__global__", style_id=style_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}

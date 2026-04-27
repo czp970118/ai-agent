@@ -270,6 +270,7 @@ async def search_xhs_keyword_and_poll_details(
     page_size: int = 20,
     sort: str = "general",
     requirements: list[str] | None = None,
+    domains: list[str] | None = None,
 ) -> str:
     try:
         from .xhs_note_pipeline import search_and_poll_notes
@@ -281,6 +282,7 @@ async def search_xhs_keyword_and_poll_details(
         page_size=page_size,
         sort=sort,
         requirements=requirements,
+        domains=domains,
     )
 
 
