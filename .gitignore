@@ -28,3 +28,5 @@ build/
 # Local runtime data (do not commit)
 /mcp_server/data/
 /mcp_server/json/
+
+/compose.yml
