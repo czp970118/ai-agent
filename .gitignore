@@ -29,4 +29,4 @@ build/
 /mcp_server/data/
 /mcp_server/json/
 
-/compose.yml
+/test.yml
