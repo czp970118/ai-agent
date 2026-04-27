@@ -105,7 +105,7 @@ export default function AssistantClient({ agentId }: Props) {
     return "暂无提示词";
   }, [loadingDomainPrompts, selectedPrompt, defaultPrompt]);
 
-  const selectedPromptBody = String(selectedPrompt?.body ?? selectedPrompt?.body_preview ?? "").trim();
+  // const selectedPromptBody = String(selectedPrompt?.body ?? selectedPrompt?.body_preview ?? "").trim();
 
   useEffect(() => {
     setSelectedDomain("旅游");
