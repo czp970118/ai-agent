@@ -1,0 +1,36 @@
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile.mcp
+    container_name: ai_mcp
+    working_dir: /app/mcp_server
+    environment:
+      - DEEPSEEK_API_KEY=sk-a72f266d06804417825f205b6cc360d2
+    command: >
+      sh -lc "uv run python -m uvicorn main:http_app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ./:/app
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  next:
+    image: node:20-bullseye
+    container_name: ai_next
+    depends_on:
+      - mcp
+    working_dir: /app/next-project
+    environment:
+      - NEXT_PUBLIC_MCP_SERVER_URL=http://39.108.121.39
+      - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=1024
+    command: >
+      sh -lc "if [ ! -d node_modules ]; then npm ci --include=dev; fi &&
+              if [ ! -d .next ]; then npm run build; fi &&
+              exec npm run start -- --hostname 0.0.0.0 --port 3000"
+    volumes:
+      - ./:/app
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

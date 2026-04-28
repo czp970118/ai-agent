@@ -103,14 +103,22 @@ def db_fetch_cached_payload(
     query_tags = _build_query_tags(keyword, requirements)
     if not query_tags:
         return None
+    keyword_text = str(keyword or "").strip()
+    if not keyword_text:
+        return None
+    requirement_tags = [tag for tag in query_tags if tag != keyword_text]
     clean_domains = _normalize_domains(domains)
     db_path = _sqlite_db_path()
     now = _utc_now_iso()
     limit = max(int(target_count), 1)
-    like_params = [f'%"{tag}"%' for tag in query_tags]
-    where_expr = " OR ".join(["tags_json LIKE ?"] * len(like_params))
+    where_parts: list[str] = ["(query_terms_json LIKE ? OR note_json LIKE ?)"]
+    where_args: list[Any] = [f'%"{keyword_text}"%', f"%{keyword_text}%"]
+    if requirement_tags:
+        requirement_likes = [f'%"{tag}"%' for tag in requirement_tags]
+        where_parts.append("(" + " OR ".join(["query_terms_json LIKE ?"] * len(requirement_likes)) + ")")
+        where_args.extend(requirement_likes)
     domain_expr, domain_params = _domain_filter_like_expr(clean_domains)
-    full_where = f"({where_expr})"
+    full_where = " AND ".join(where_parts)
     if domain_expr:
         full_where += f" AND ({domain_expr})"
     with sqlite3.connect(db_path) as conn:
@@ -125,7 +133,7 @@ def db_fetch_cached_payload(
             ORDER BY used_count DESC, updated_at DESC
             LIMIT ?
             """,
-            (*like_params, *domain_params, limit),
+            (*where_args, *domain_params, limit),
         ).fetchall()
         if not rows:
             return None
