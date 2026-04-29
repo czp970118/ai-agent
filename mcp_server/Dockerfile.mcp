@@ -2,10 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app/mcp_server
 
-# Allow overriding Playwright CDN during image build.
-ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+# Optional Playwright download host override.
+ARG PLAYWRIGHT_DOWNLOAD_HOST=
 ARG APT_MIRROR=mirrors.aliyun.com
-ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}
 ENV PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000
 
 # Install Playwright runtime dependencies once at build time.
@@ -49,4 +48,4 @@ RUN python -m pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/si
 
 COPY mcp_server/ /app/mcp_server/
 
-RUN uv sync && uv run playwright install chromium
+RUN uv sync && if [ -n "$PLAYWRIGHT_DOWNLOAD_HOST" ]; then PLAYWRIGHT_DOWNLOAD_HOST="$PLAYWRIGHT_DOWNLOAD_HOST" uv run playwright install chromium; else uv run playwright install chromium; fi
