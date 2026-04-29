@@ -269,6 +269,7 @@ async def search_xhs_keyword_and_poll_details(
     topic: str,
     page_size: int = 20,
     sort: str = "general",
+    city_name: str = "",
     requirements: list[str] | None = None,
     domains: list[str] | None = None,
 ) -> str:
@@ -281,6 +282,7 @@ async def search_xhs_keyword_and_poll_details(
         keyword=topic,
         page_size=page_size,
         sort=sort,
+        city_name=city_name,
         requirements=requirements,
         domains=domains,
     )

@@ -149,6 +149,13 @@ def _normalize_page_size(value: Any) -> int:
     return max(1, min(number, 50))
 
 
+def _normalize_city_name(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text[:32]
+
+
 def _fallback_plan_xiaohongshu_params(messages: list[dict[str, Any]]) -> dict[str, Any]:
     user_input = _extract_last_user_message(messages)
     if not user_input:
@@ -157,6 +164,7 @@ def _fallback_plan_xiaohongshu_params(messages: list[dict[str, Any]]) -> dict[st
     return {
         "ok": True,
         "topic": topic,
+        "city_name": "",
         "requirements": [],
         "page_size": 15,
         "fallback": True,
@@ -240,9 +248,11 @@ async def _plan_xiaohongshu_params(
         return {"ok": False, "error": "参数规划缺少 topic"}
     requirements = _normalize_requirements(parsed.get("requirements"), topic)
     page_size = _normalize_page_size(parsed.get("page_size"))
+    city_name = _normalize_city_name(parsed.get("city_name"))
     return {
         "ok": True,
         "topic": topic,
+        "city_name": city_name,
         "requirements": requirements,
         "page_size": page_size,
     }
@@ -402,6 +412,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 json.dumps(
                     {
                         "topic": planned.get("topic"),
+                        "city_name": planned.get("city_name"),
                         "requirements": planned.get("requirements"),
                         "page_size": planned.get("page_size"),
                     },
@@ -414,6 +425,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 "topic": str(planned.get("topic") or ""),
                 "page_size": int(planned.get("page_size") or 15),
                 "sort": "general",
+                "city_name": str(planned.get("city_name") or ""),
                 "requirements": planned.get("requirements") if isinstance(planned.get("requirements"), list) else [],
                 "domains": [],
             }
@@ -437,6 +449,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                 topic=xhs_request_payload["topic"],
                 page_size=xhs_request_payload["page_size"],
                 sort=xhs_request_payload["sort"],
+                city_name=xhs_request_payload["city_name"],
                 requirements=xhs_request_payload["requirements"],
                 domains=xhs_request_payload["domains"],
             )

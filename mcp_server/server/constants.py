@@ -7,6 +7,7 @@ SENTENCE_ANALYSIS_PROMPT = (
     "请分析 chatInput 并只输出 JSON。"
     "输出字段："
     "- topic: 最主要主题词（字符串，必填，优先“城市/目的地+场景”）"
+    "- city_name: 城市名（字符串，可空；若能识别请尽量给出，如“湛江”）"
     "- requirements: 其他具体要求关键词（字符串数组，最多5个，可空）"
     "- page_size: 主题词搜索条数（可空，默认15）"
     "规则："
@@ -14,8 +15,9 @@ SENTENCE_ANALYSIS_PROMPT = (
     "2) requirements 只保留与 topic 强相关的具体要素（如广州塔、美食、拍照打卡、3日游、路线、住宿、预算）。"
     "3) requirements 不要放泛化任务词（如“旅游攻略”“写一篇”“帮我”），也不要重复 topic 本身，不要输出空字符串。"
     "4) page_size 若缺失，输出 15。"
-    "5) 只输出纯 JSON，不要解释、不要 Markdown。"
-    "顶层字段只能是：topic、requirements、page_size。"
+    "5) city_name 不是搜索词，仅用于缓存和结果过滤；无法判断时输出空字符串。"
+    "6) 只输出纯 JSON，不要解释、不要 Markdown。"
+    "顶层字段只能是：topic、city_name、requirements、page_size。"
 )
 
 XIAOHONGSHU_PUBLISH_SKILL_PATH = (

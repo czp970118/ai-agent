@@ -253,6 +253,7 @@ async def search_and_poll_notes(
     keyword: str,
     page_size: int = 20,
     sort: str = "general",
+    city_name: str = "",
     requirements: list[str] | None = None,
     domains: list[str] | None = None,
 ) -> str:
@@ -277,10 +278,12 @@ async def search_and_poll_notes(
         text = str(d or "").strip()
         if text and text not in clean_domains:
             clean_domains.append(text)
+    clean_city_name = str(city_name or "").strip()
     db_payload = db_fetch_cached_payload(
         main_keyword,
         clean_requirements,
         target_count=target_count,
+        city_name=clean_city_name,
         domains=clean_domains,
     )
     db_notes: list[dict[str, Any]] = []
@@ -421,6 +424,7 @@ async def search_and_poll_notes(
             "topic": main_keyword,
             "requirements": clean_requirements,
             "domains": clean_domains,
+            "city_name": clean_city_name,
             "page_size": topic_query_size,
             "sort": sort,
             "sub_query_page_size": sub_query_size,
@@ -430,7 +434,13 @@ async def search_and_poll_notes(
         },
         "notes": merged_notes,
     }
-    db_upsert_query_cache(main_keyword, aggregate, clean_requirements, domains=clean_domains)
+    db_upsert_query_cache(
+        main_keyword,
+        aggregate,
+        clean_requirements,
+        city_name=clean_city_name,
+        domains=clean_domains,
+    )
     logger.info(
         "xhs_db_upsert keyword=%s note_count=%s",
         main_keyword,

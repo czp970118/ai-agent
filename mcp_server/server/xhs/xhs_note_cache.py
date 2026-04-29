@@ -70,6 +70,7 @@ def _init_cache_db(conn: sqlite3.Connection) -> None:
             note_json TEXT NOT NULL,
             tags_json TEXT NOT NULL DEFAULT '[]',
             domains_json TEXT NOT NULL DEFAULT '[]',
+            city_name TEXT NOT NULL DEFAULT '',
             query_terms_json TEXT NOT NULL DEFAULT '[]',
             source TEXT NOT NULL DEFAULT 'xhs_search',
             used_count INTEGER NOT NULL DEFAULT 0,
@@ -92,12 +93,15 @@ def _init_cache_db(conn: sqlite3.Connection) -> None:
     }
     if "domains_json" not in columns:
         conn.execute("ALTER TABLE xhs_note_cache ADD COLUMN domains_json TEXT NOT NULL DEFAULT '[]'")
+    if "city_name" not in columns:
+        conn.execute("ALTER TABLE xhs_note_cache ADD COLUMN city_name TEXT NOT NULL DEFAULT ''")
 
 
 def db_fetch_cached_payload(
     keyword: str,
     requirements: list[str],
     target_count: int,
+    city_name: str = "",
     domains: list[str] | None = None,
 ) -> dict[str, Any] | None:
     query_tags = _build_query_tags(keyword, requirements)
@@ -108,6 +112,11 @@ def db_fetch_cached_payload(
         return None
     requirement_tags = [tag for tag in query_tags if tag != keyword_text]
     clean_domains = _normalize_domains(domains)
+    clean_city_name = str(city_name or "").strip()
+    is_travel_domain = "旅游" in clean_domains
+    if is_travel_domain and not clean_city_name:
+        # 旅游领域必须带城市名，不满足则不走缓存，避免串地名。
+        return None
     db_path = _sqlite_db_path()
     now = _utc_now_iso()
     limit = max(int(target_count), 1)
@@ -117,6 +126,9 @@ def db_fetch_cached_payload(
         requirement_likes = [f'%"{tag}"%' for tag in requirement_tags]
         where_parts.append("(" + " OR ".join(["query_terms_json LIKE ?"] * len(requirement_likes)) + ")")
         where_args.extend(requirement_likes)
+    if is_travel_domain:
+        where_parts.append("city_name = ?")
+        where_args.append(clean_city_name)
     domain_expr, domain_params = _domain_filter_like_expr(clean_domains)
     full_where = " AND ".join(where_parts)
     if domain_expr:
@@ -125,7 +137,7 @@ def db_fetch_cached_payload(
         _init_cache_db(conn)
         rows = conn.execute(
             """
-            SELECT note_id, note_json, tags_json, domains_json, used_count
+            SELECT note_id, note_json, tags_json, domains_json, city_name, used_count
             FROM xhs_note_cache
             WHERE """
             + full_where
@@ -139,7 +151,7 @@ def db_fetch_cached_payload(
             return None
         notes: list[dict[str, Any]] = []
         hit_ids: list[str] = []
-        for note_id, note_json, _tags_json, domains_json, _used_count in rows:
+        for note_id, note_json, _tags_json, domains_json, row_city_name, _used_count in rows:
             try:
                 note_obj = json.loads(str(note_json or ""))
             except Exception:
@@ -152,6 +164,7 @@ def db_fetch_cached_payload(
                 if not isinstance(row_domains, list):
                     row_domains = []
                 note_obj["domains"] = [str(x).strip() for x in row_domains if str(x).strip()]
+                note_obj["city_name"] = str(row_city_name or "").strip()
                 notes.append(note_obj)
                 hit_ids.append(str(note_id))
             if len(notes) >= limit:
@@ -190,6 +203,7 @@ def db_fetch_cached_payload(
                 "db_hit_count": len(notes),
                 "db_tags": query_tags,
                 "domains": clean_domains,
+                "city_name": clean_city_name,
             },
             "notes": notes,
         }
@@ -199,6 +213,7 @@ def db_upsert_query_cache(
     keyword: str,
     payload: dict[str, Any],
     requirements: list[str],
+    city_name: str = "",
     domains: list[str] | None = None,
 ) -> None:
     notes = payload.get("notes")
@@ -209,6 +224,7 @@ def db_upsert_query_cache(
         return
     tags = _query_storage_tags(keyword, requirements, len(notes))
     clean_domains = _normalize_domains(domains)
+    clean_city_name = str(city_name or "").strip()
     db_path = _sqlite_db_path()
     now = _utc_now_iso()
     with sqlite3.connect(db_path) as conn:
@@ -220,29 +236,31 @@ def db_upsert_query_cache(
             if not note_id:
                 continue
             row = conn.execute(
-                "SELECT tags_json, domains_json, used_count, created_at FROM xhs_note_cache WHERE note_id = ? LIMIT 1",
+                "SELECT tags_json, domains_json, city_name, used_count, created_at FROM xhs_note_cache WHERE note_id = ? LIMIT 1",
                 (note_id,),
             ).fetchone()
             note["domains"] = clean_domains
+            note["city_name"] = clean_city_name
             note_json = json.dumps(note, ensure_ascii=False)
             if row is None:
                 conn.execute(
                     """
-                    INSERT INTO xhs_note_cache (note_id, note_json, tags_json, domains_json, query_terms_json, source, used_count, last_used_at, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, 'xhs_search', 0, NULL, ?, ?)
+                    INSERT INTO xhs_note_cache (note_id, note_json, tags_json, domains_json, city_name, query_terms_json, source, used_count, last_used_at, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'xhs_search', 0, NULL, ?, ?)
                     """,
                     (
                         note_id,
                         note_json,
                         json.dumps(tags, ensure_ascii=False),
                         json.dumps(clean_domains, ensure_ascii=False),
+                        clean_city_name,
                         json.dumps(query_tags, ensure_ascii=False),
                         now,
                         now,
                     ),
                 )
                 continue
-            existing_tags_raw, existing_domains_raw, used_count, created_at = row
+            existing_tags_raw, existing_domains_raw, existing_city_name, used_count, created_at = row
             try:
                 existing_tags = json.loads(str(existing_tags_raw or "[]"))
             except Exception:
@@ -259,13 +277,14 @@ def db_upsert_query_cache(
             conn.execute(
                 """
                 UPDATE xhs_note_cache
-                SET note_json = ?, tags_json = ?, domains_json = ?, query_terms_json = ?, used_count = ?, created_at = ?, updated_at = ?
+                SET note_json = ?, tags_json = ?, domains_json = ?, city_name = ?, query_terms_json = ?, used_count = ?, created_at = ?, updated_at = ?
                 WHERE note_id = ?
                 """,
                 (
                     note_json,
                     json.dumps(merged_tags, ensure_ascii=False),
                     json.dumps(merged_domains, ensure_ascii=False),
+                    clean_city_name or str(existing_city_name or "").strip(),
                     json.dumps(query_tags, ensure_ascii=False),
                     int(used_count or 0),
                     str(created_at or now),
@@ -383,6 +402,7 @@ def db_list_cached_notes(
                 "used_count": int(used_count or 0),
                 "tags": tags,
                 "domains": domains,
+                "city_name": str(note.get("city_name") or ""),
                 "query_terms": query_terms,
             }
         )
