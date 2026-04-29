@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from ..xhs.xhs_search import search_xhs_keyword_and_poll_details as search_impl
@@ -108,3 +111,38 @@ async def delete_cache_note_detail(note_id: str) -> dict:
     if not deleted:
         raise HTTPException(status_code=404, detail="note not found")
     return {"ok": True}
+
+
+@search_router.get("/xhs-image-proxy")
+async def get_xhs_image_proxy(url: str = Query(..., min_length=1)) -> Response:
+    parsed = urlparse(str(url or "").strip())
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="invalid url scheme")
+    host = (parsed.hostname or "").lower()
+    if not host.endswith("xhscdn.com"):
+        raise HTTPException(status_code=400, detail="host not allowed")
+    headers = {
+        "user-agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+        ),
+        "referer": "https://www.xiaohongshu.com/",
+        "accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as client:
+            resp = await client.get(url)
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail="upstream rejected")
+        media_type = resp.headers.get("content-type", "image/jpeg")
+        return Response(
+            content=resp.content,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "public, max-age=86400",
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"proxy failed: {exc}") from exc

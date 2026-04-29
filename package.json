@@ -9,6 +9,9 @@
     "dev:next": "npm run dev --prefix next-project",
     "dev:mcp": "uv run --directory mcp_server python -m uvicorn main:http_app --host 127.0.0.1 --port 8000",
     "deploy:prod": "bash ./scripts/deploy-prod.sh",
+    "deploy:prod:build": "bash ./scripts/deploy-prod-build.sh",
+    "deploy:prod:next": "bash ./scripts/deploy-prod-next.sh",
+    "xhs:refresh-login": "bash ./scripts/refresh-xhs-login-and-upload.sh",
     "pull:db": "bash ./scripts/pull-db.sh"
   },
   "devDependencies": {

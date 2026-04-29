@@ -64,6 +64,14 @@ function toMetricNumber(value: unknown): string {
   return String(Math.trunc(num));
 }
 
+function toProxyImageUrl(rawUrl: string | undefined): string {
+  const src = String(rawUrl || "").trim();
+  if (!src) return "";
+  if (src.startsWith("data:") || src.startsWith("blob:") || src.startsWith("/")) return src;
+  if (!/^https?:\/\//i.test(src)) return src;
+  return `${getMcpBaseUrl()}/search/xhs-image-proxy?url=${encodeURIComponent(src)}`;
+}
+
 function domainTagClass(domain: string): string {
   const colorMap: Record<string, string> = {
     旅游: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
@@ -549,7 +557,7 @@ export default function XhsPostsAdminClient() {
                   {Array.isArray(activeNote.image_list) && activeNote.image_list.length ? (
                     <div className="flex h-full flex-col">
                       <img
-                        src={activeNote.image_list[activeImageIndex] || activeNote.image_list[0]}
+                        src={toProxyImageUrl(activeNote.image_list[activeImageIndex] || activeNote.image_list[0])}
                         alt={`${activeNote.title || activeNote.note_id}-image-${activeImageIndex + 1}`}
                         className="h-[470px] w-full max-w-full cursor-zoom-in rounded-lg object-cover"
                         loading="lazy"
@@ -569,7 +577,7 @@ export default function XhsPostsAdminClient() {
                                 }`}
                                 onClick={() => setActiveImageIndex(index)}
                               >
-                                <img src={src} alt={`thumb-${index + 1}`} className="h-14 w-full object-cover" loading="lazy" />
+                                <img src={toProxyImageUrl(src)} alt={`thumb-${index + 1}`} className="h-14 w-full object-cover" loading="lazy" />
                               </button>
                             ))}
                           </div>
@@ -658,7 +666,7 @@ export default function XhsPostsAdminClient() {
                   {editImages.length ? (
                     <>
                       <img
-                        src={editImages[activeImageIndex] || editImages[0]}
+                        src={toProxyImageUrl(editImages[activeImageIndex] || editImages[0])}
                         alt={`${activeNote.note_id}-edit-image-${activeImageIndex + 1}`}
                         className="h-[470px] w-full max-w-full cursor-zoom-in rounded-lg object-cover"
                         loading="lazy"
@@ -677,7 +685,7 @@ export default function XhsPostsAdminClient() {
                               }`}
                               onClick={() => setActiveImageIndex(index)}
                             >
-                              <img src={src} alt={`edit-thumb-${index + 1}`} className="h-14 w-full object-cover" loading="lazy" />
+                              <img src={toProxyImageUrl(src)} alt={`edit-thumb-${index + 1}`} className="h-14 w-full object-cover" loading="lazy" />
                             </button>
                             <button
                               type="button"
@@ -830,11 +838,11 @@ export default function XhsPostsAdminClient() {
                 关闭
               </button>
               <img
-                src={
+                src={toProxyImageUrl(
                   dialogMode === "edit"
                     ? editImages[activeImageIndex] || editImages[0] || ""
                     : activeNote.image_list?.[activeImageIndex] || activeNote.image_list?.[0] || ""
-                }
+                )}
                 alt="图片整屏预览"
                 className="max-h-[95vh] max-w-[95vw] rounded-lg object-contain"
                 onClick={(e) => e.stopPropagation()}

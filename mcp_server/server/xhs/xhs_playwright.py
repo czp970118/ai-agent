@@ -242,6 +242,7 @@ def save_login_state() -> None:
     from playwright.sync_api import sync_playwright
 
     path = os.environ.get("XHS_STORAGE_STATE", "server/xhs/xhs_storage_state.json")
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with sync_playwright() as p:
         browser = _launch_browser(
             p,
