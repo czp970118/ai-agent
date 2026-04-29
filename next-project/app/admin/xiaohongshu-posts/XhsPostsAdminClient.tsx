@@ -10,6 +10,7 @@ type NoteRow = {
   title: string;
   url: string;
   image_list?: string[];
+  city_name?: string;
   content_text: string;
   like_count?: number | string;
   collect_count?: number | string;
@@ -31,10 +32,10 @@ const SORT_OPTIONS = [
 ] as const;
 
 const columns = [
-  { id: "image", name: "图片" },
   { id: "title", name: "标题" },
   { id: "content_text", name: "内容" },
   { id: "domains", name: "领域" },
+  { id: "city_name", name: "城市" },
   { id: "origin_metrics", name: "原帖数据" },
   { id: "tags", name: "标签" },
   { id: "used_count", name: "使用次数" },
@@ -105,8 +106,12 @@ export default function XhsPostsAdminClient() {
   const [editContent, setEditContent] = useState("");
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editDomains, setEditDomains] = useState<string[]>([]);
+  const [editCityName, setEditCityName] = useState("");
+  const [editImages, setEditImages] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
   const [saving, setSaving] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [domainFilterOpen, setDomainFilterOpen] = useState(false);
   const [sortFilterOpen, setSortFilterOpen] = useState(false);
   const domainFilterRef = useRef<HTMLDivElement | null>(null);
@@ -176,7 +181,11 @@ export default function XhsPostsAdminClient() {
     setEditContent(note.content_text || "");
     setEditTags(Array.isArray(note.tags) ? note.tags : []);
     setEditDomains(Array.isArray(note.domains) ? note.domains : []);
+    setEditCityName(note.city_name || "");
+    setEditImages(Array.isArray(note.image_list) ? note.image_list : []);
     setNewTag("");
+    setActiveImageIndex(0);
+    setImagePreviewOpen(false);
     setDialogOpen(true);
   }
 
@@ -206,6 +215,8 @@ export default function XhsPostsAdminClient() {
           content_text: editContent.trim(),
           tags: cleanedTags,
           domains: cleanedDomains,
+          city_name: editCityName.trim(),
+          image_list: editImages,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -373,7 +384,7 @@ export default function XhsPostsAdminClient() {
       <div className="mt-4">
         <Table className={ui.tableWrap}>
           <Table.ScrollContainer>
-            <Table.Content aria-label="小红书帖子表格" className="min-w-[1420px]">
+            <Table.Content aria-label="小红书帖子表格" className="min-w-[1320px]">
               <Table.Header columns={columns}>
                 {(column) => (
                   <Table.Column isRowHeader={column.id === "title"} className="whitespace-nowrap">
@@ -384,20 +395,6 @@ export default function XhsPostsAdminClient() {
               <Table.Body>
                 {notes.map((n) => (
                   <Table.Row key={n.note_id}>
-                    <Table.Cell>
-                      {Array.isArray(n.image_list) && n.image_list[0] ? (
-                        <img
-                          src={n.image_list[0]}
-                          alt={n.title || n.note_id}
-                          className="h-14 w-14 rounded-md border border-slate-200 object-cover dark:border-slate-700"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-md border border-slate-200 text-[10px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                          无图
-                        </div>
-                      )}
-                    </Table.Cell>
                     <Table.Cell>
                       <a
                         className="max-w-[220px] overflow-hidden font-medium text-sky-600 hover:underline [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
@@ -430,6 +427,11 @@ export default function XhsPostsAdminClient() {
                           </span>
                         )}
                       </TagGroup>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">
+                        {n.city_name?.trim() || "-"}
+                      </span>
                     </Table.Cell>
                     <Table.Cell>
                       <div className="min-w-[110px] grid gap-1 text-xs text-slate-600 dark:text-slate-300">
@@ -541,126 +543,266 @@ export default function XhsPostsAdminClient() {
                 关闭
               </button>
             </div>
-            <div className="grid gap-3">
-              <label className="grid gap-1.5">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">标题</span>
-                <input
-                  className={ui.input}
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  disabled={dialogMode === "view"}
-                />
-              </label>
-              <label className="grid gap-1.5">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">ID（只读）</span>
-                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  {activeNote.note_id}
-                </p>
-              </label>
-              <label className="grid gap-1.5">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">链接（只读）</span>
-                <a
-                  href={activeNote.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block truncate rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-sky-700 underline-offset-2 hover:underline dark:border-slate-700 dark:bg-slate-900 dark:text-sky-300"
-                  title={activeNote.url}
-                >
-                  {activeNote.url}
-                </a>
-              </label>
-              <label className="grid gap-1.5">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">正文</span>
-                <textarea
-                  className={`min-h-[560px] ${ui.textarea}`}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  disabled={dialogMode === "view"}
-                />
-              </label>
-              <div>
-                <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">领域（可多选）</p>
-                <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
-                  <div className="flex flex-wrap gap-2">
-                    {DOMAIN_OPTIONS.map((domain) => {
-                      const checked = editDomains.includes(domain);
-                      return (
-                        <label
-                          key={domain}
-                          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition ${
-                            checked
-                              ? domainTagClass(domain)
-                              : "border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-3.5 w-3.5"
-                            checked={checked}
-                            disabled={dialogMode === "view"}
-                            onChange={(e) => {
-                              if (dialogMode === "view") return;
-                              setEditDomains((prev) =>
-                                e.target.checked ? [...prev, domain] : prev.filter((item) => item !== domain)
-                              );
-                            }}
-                          />
-                          <span>{domain}</span>
-                        </label>
-                      );
-                    })}
+            {dialogMode === "view" ? (
+              <div className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
+                <div className="min-w-0 h-[560px] rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-900/60">
+                  {Array.isArray(activeNote.image_list) && activeNote.image_list.length ? (
+                    <div className="flex h-full flex-col">
+                      <img
+                        src={activeNote.image_list[activeImageIndex] || activeNote.image_list[0]}
+                        alt={`${activeNote.title || activeNote.note_id}-image-${activeImageIndex + 1}`}
+                        className="h-[470px] w-full max-w-full cursor-zoom-in rounded-lg object-cover"
+                        loading="lazy"
+                        onClick={() => setImagePreviewOpen(true)}
+                      />
+                      {activeNote.image_list.length > 1 ? (
+                        <div className="mt-2">
+                          <div className="no-scrollbar w-full max-w-full flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-md border border-slate-200 bg-white/80 p-1 dark:border-slate-700 dark:bg-slate-900/70">
+                            {activeNote.image_list.map((src, index) => (
+                              <button
+                                key={`${activeNote.note_id}-thumb-${index}`}
+                                type="button"
+                                className={`w-16 shrink-0 snap-start overflow-hidden rounded-md border ${
+                                  activeImageIndex === index
+                                    ? "border-sky-400 ring-1 ring-sky-300"
+                                    : "border-slate-200 dark:border-slate-700"
+                                }`}
+                                onClick={() => setActiveImageIndex(index)}
+                              >
+                                <img src={src} alt={`thumb-${index + 1}`} className="h-14 w-full object-cover" loading="lazy" />
+                              </button>
+                            ))}
+                          </div>
+                          <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">← 横向滑动查看更多图片 →</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                      暂无图片
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex h-[560px] flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+                  <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+                    <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{activeNote.title || activeNote.note_id}</p>
+                    <a
+                      href={activeNote.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 block truncate text-xs text-sky-600 underline-offset-2 hover:underline dark:text-sky-300"
+                      title={activeNote.url}
+                    >
+                      原文链接
+                    </a>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-200">
+                      {activeNote.content_text || "-"}
+                    </p>
+                  </div>
+                  <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-700">
+                    <div className="mb-2">
+                      <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">标签</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(activeNote.tags ?? []).length ? (
+                          (activeNote.tags ?? []).map((item) => (
+                            <span
+                              key={item}
+                              className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
+                            >
+                              {item}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-400 dark:text-slate-500">暂无标签</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">领域</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(activeNote.domains ?? []).length ? (
+                          (activeNote.domains ?? []).map((item) => (
+                            <span
+                              key={item}
+                              className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] ${domainTagClass(item)}`}
+                            >
+                              {item}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-400 dark:text-slate-500">未设置领域</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mb-3 grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
+                        使用次数：{activeNote.used_count}
+                      </span>
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
+                        城市：{activeNote.city_name?.trim() || "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-300">
+                      <span>👍 {toMetricNumber(activeNote.like_count)}</span>
+                      <span>⭐ {toMetricNumber(activeNote.collect_count)}</span>
+                      <span>💬 {toMetricNumber(activeNote.comment_count)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div>
-                <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">标签</p>
-                <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
-                  {editTags.length ? (
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {editTags.map((item, index) => (
-                        <span
-                          key={`${index}-${item}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
-                        >
-                          {item}
-                          {dialogMode === "edit" ? (
+            ) : (
+              <div className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
+                <div className="min-w-0 flex h-[560px] flex-col rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-900/60">
+                  {editImages.length ? (
+                    <>
+                      <img
+                        src={editImages[activeImageIndex] || editImages[0]}
+                        alt={`${activeNote.note_id}-edit-image-${activeImageIndex + 1}`}
+                        className="h-[470px] w-full max-w-full cursor-zoom-in rounded-lg object-cover"
+                        loading="lazy"
+                        onClick={() => setImagePreviewOpen(true)}
+                      />
+                      <div className="mt-2">
+                        <div className="no-scrollbar w-full max-w-full flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-md border border-slate-200 bg-white/80 p-1 dark:border-slate-700 dark:bg-slate-900/70">
+                        {editImages.map((src, index) => (
+                          <div key={`${activeNote.note_id}-edit-thumb-${index}`} className="relative">
                             <button
                               type="button"
-                              onClick={() => removeTag(index)}
-                              className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 p-0 text-[10px] leading-none text-white transition hover:bg-rose-500"
+                              className={`w-16 shrink-0 snap-start overflow-hidden rounded-md border ${
+                                activeImageIndex === index
+                                  ? "border-sky-400 ring-1 ring-sky-300"
+                                  : "border-slate-200 dark:border-slate-700"
+                              }`}
+                              onClick={() => setActiveImageIndex(index)}
+                            >
+                              <img src={src} alt={`edit-thumb-${index + 1}`} className="h-14 w-full object-cover" loading="lazy" />
+                            </button>
+                            <button
+                              type="button"
+                              className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-rose-500"
+                              onClick={() => {
+                                setEditImages((prev) => prev.filter((_, i) => i !== index));
+                                setActiveImageIndex((prev) => (prev > 0 && prev >= index ? prev - 1 : prev));
+                              }}
+                              aria-label="删除图片"
                             >
                               ×
                             </button>
-                          ) : null}
-                        </span>
-                      ))}
-                    </div>
+                          </div>
+                        ))}
+                        </div>
+                        <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">← 横向滑动查看更多图片 →</p>
+                      </div>
+                    </>
                   ) : (
-                    <p className={`${ui.hint} mb-3`}>暂无标签</p>
+                    <div className="mb-2 flex h-[470px] items-center justify-center rounded-lg border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                      暂无图片
+                    </div>
                   )}
-                  {dialogMode === "edit" ? (
-                    <div className="flex items-center gap-2">
+                </div>
+                <div className="min-w-0 flex h-[560px] flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+                  <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                    <label className="grid gap-1.5">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">标题</span>
+                      <input className={ui.input} value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                    </label>
+                    <label className="grid gap-1.5">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">正文</span>
+                      <textarea
+                        className={`min-h-[220px] ${ui.textarea}`}
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                      />
+                    </label>
+                    <label className="grid gap-1.5">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">城市</span>
                       <input
                         className={ui.input}
-                        value={newTag}
-                        onChange={(e) => setNewTag(e.target.value)}
-                        placeholder="输入新标签"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addTag();
-                          }
-                        }}
+                        value={editCityName}
+                        onChange={(e) => setEditCityName(e.target.value)}
+                        placeholder="输入城市名"
                       />
-                      <button className={ui.buttonSecondary} type="button" onClick={addTag}>
-                        新增标签
-                      </button>
+                    </label>
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">领域（可多选）</p>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+                        <div className="flex flex-wrap gap-2">
+                          {DOMAIN_OPTIONS.map((domain) => {
+                            const checked = editDomains.includes(domain);
+                            return (
+                              <label
+                                key={domain}
+                                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition ${
+                                  checked
+                                    ? domainTagClass(domain)
+                                    : "border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="h-3.5 w-3.5"
+                                  checked={checked}
+                                  onChange={(e) =>
+                                    setEditDomains((prev) =>
+                                      e.target.checked ? [...prev, domain] : prev.filter((item) => item !== domain)
+                                    )
+                                  }
+                                />
+                                <span>{domain}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
-                  ) : null}
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">标签（可多选）</p>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+                        {editTags.length ? (
+                          <div className="mb-3 flex flex-wrap gap-2">
+                            {editTags.map((item, index) => (
+                              <span
+                                key={`${index}-${item}`}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
+                              >
+                                {item}
+                                <button
+                                  type="button"
+                                  onClick={() => removeTag(index)}
+                                  className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 p-0 text-[10px] leading-none text-white transition hover:bg-rose-500"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className={`${ui.hint} mb-3`}>暂无标签</p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <input
+                            className={ui.input}
+                            value={newTag}
+                            onChange={(e) => setNewTag(e.target.value)}
+                            placeholder="输入新标签"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                addTag();
+                              }
+                            }}
+                          />
+                          <button className={ui.buttonSecondary} type="button" onClick={addTag}>
+                            新增标签
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              {dialogMode === "edit" ? (
-                <div className="ml-auto flex items-center gap-2">
+                <div className="col-span-full flex items-center justify-end gap-2">
                   <button
                     className={ui.buttonSecondary}
                     type="button"
@@ -675,9 +817,30 @@ export default function XhsPostsAdminClient() {
                     {saving ? "保存中..." : "保存修改"}
                   </button>
                 </div>
-              ) : null}
-            </div>
+              </div>
+            )}
           </div>
+          {imagePreviewOpen ? (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4" onClick={() => setImagePreviewOpen(false)}>
+              <button
+                type="button"
+                className="absolute right-4 top-4 rounded-full bg-white/15 px-3 py-1 text-sm text-white hover:bg-white/25"
+                onClick={() => setImagePreviewOpen(false)}
+              >
+                关闭
+              </button>
+              <img
+                src={
+                  dialogMode === "edit"
+                    ? editImages[activeImageIndex] || editImages[0] || ""
+                    : activeNote.image_list?.[activeImageIndex] || activeNote.image_list?.[0] || ""
+                }
+                alt="图片整屏预览"
+                className="max-h-[95vh] max-w-[95vw] rounded-lg object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
       {loading ? <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">加载中...</p> : null}

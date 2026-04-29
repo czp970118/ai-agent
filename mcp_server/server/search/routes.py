@@ -22,6 +22,8 @@ class UpdateCachedNoteRequest(BaseModel):
     content_text: str = Field(default="", min_length=0)
     tags: list[str] = Field(default_factory=list)
     domains: list[str] = Field(default_factory=list)
+    city_name: str = Field(default="", min_length=0)
+    image_list: list[str] = Field(default_factory=list)
 
 
 @search_router.post("/poll")
@@ -92,6 +94,8 @@ async def patch_cache_note_detail(note_id: str, body: UpdateCachedNoteRequest) -
         content_text=str(body.content_text or "").strip(),
         tags=body.tags,
         domains=body.domains,
+        city_name=str(body.city_name or "").strip(),
+        image_list=body.image_list,
     )
     if item is None:
         raise HTTPException(status_code=404, detail="note not found")

@@ -4,9 +4,12 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "bash ./scripts/dev-in-separate-terminals.sh",
+    "dev:local": "bash ./scripts/dev-local.sh",
     "dev:combined": "concurrently -n next,mcp -c cyan,magenta \"npm run dev --prefix next-project\" \"uv run --directory mcp_server python -m uvicorn main:http_app --host 127.0.0.1 --port 8000\"",
     "dev:next": "npm run dev --prefix next-project",
-    "dev:mcp": "uv run --directory mcp_server python -m uvicorn main:http_app --host 127.0.0.1 --port 8000"
+    "dev:mcp": "uv run --directory mcp_server python -m uvicorn main:http_app --host 127.0.0.1 --port 8000",
+    "deploy:prod": "bash ./scripts/deploy-prod.sh",
+    "pull:db": "bash ./scripts/pull-db.sh"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

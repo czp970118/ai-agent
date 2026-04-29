@@ -463,6 +463,7 @@ def db_get_cached_note(note_id: str) -> dict[str, Any] | None:
         "title": str(note.get("title") or ""),
         "url": str(note.get("note_url") or note.get("url") or ""),
         "image_list": note.get("image_list") if isinstance(note.get("image_list"), list) else [],
+        "city_name": str(note.get("city_name") or ""),
         "content_text": str(note.get("content_text") or ""),
         "like_count": note.get("like_count"),
         "collect_count": note.get("collect_count"),
@@ -484,6 +485,8 @@ def db_update_cached_note(
     content_text: str,
     tags: list[str],
     domains: list[str],
+    city_name: str,
+    image_list: list[str],
 ) -> dict[str, Any] | None:
     target_id = str(note_id or "").strip()
     if not target_id:
@@ -498,6 +501,11 @@ def db_update_cached_note(
         value = str(raw or "").strip()
         if value and value not in clean_domains:
             clean_domains.append(value)
+    clean_images: list[str] = []
+    for raw in image_list:
+        value = str(raw or "").strip()
+        if value and value not in clean_images:
+            clean_images.append(value)
     db_path = _sqlite_db_path()
     now = _utc_now_iso()
     with sqlite3.connect(db_path) as conn:
@@ -519,6 +527,8 @@ def db_update_cached_note(
         note["title"] = title
         note["content_text"] = content_text
         note["domains"] = clean_domains
+        note["city_name"] = str(city_name or "").strip()
+        note["image_list"] = clean_images
         conn.execute(
             """
             UPDATE xhs_note_cache
