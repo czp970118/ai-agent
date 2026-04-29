@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlparse
 
 
 def _sqlite_db_path() -> Path:
@@ -60,6 +61,32 @@ def _query_storage_tags(keyword: str, requirements: list[str], note_count: int, 
     if referenced:
         tags.append("referenced:true")
     return tags
+
+
+def _to_proxy_image_url(raw_url: Any) -> str:
+    src = str(raw_url or "").strip()
+    if not src:
+        return ""
+    if src.startswith("data:") or src.startswith("blob:") or src.startswith("/"):
+        return src
+    parsed = urlparse(src)
+    if parsed.scheme not in ("http", "https"):
+        return src
+    host = (parsed.hostname or "").lower()
+    if not host.endswith("xhscdn.com"):
+        return src
+    return f"/search/xhs-image-proxy?url={quote(src, safe='')}"
+
+
+def _normalize_image_list_for_output(raw_images: Any) -> list[str]:
+    if not isinstance(raw_images, list):
+        return []
+    out: list[str] = []
+    for item in raw_images:
+        proxied = _to_proxy_image_url(item)
+        if proxied:
+            out.append(proxied)
+    return out
 
 
 def _init_cache_db(conn: sqlite3.Connection) -> None:
@@ -392,7 +419,7 @@ def db_list_cached_notes(
                 "note_id": str(note.get("note_id") or note_id or ""),
                 "title": str(note.get("title") or ""),
                 "url": str(note.get("note_url") or note.get("url") or ""),
-                "image_list": note.get("image_list") if isinstance(note.get("image_list"), list) else [],
+                "image_list": _normalize_image_list_for_output(note.get("image_list")),
                 "content_text": str(note.get("content_text") or ""),
                 "like_count": note.get("like_count"),
                 "collect_count": note.get("collect_count"),
@@ -462,7 +489,7 @@ def db_get_cached_note(note_id: str) -> dict[str, Any] | None:
         "note_id": str(note.get("note_id") or note_id_value or ""),
         "title": str(note.get("title") or ""),
         "url": str(note.get("note_url") or note.get("url") or ""),
-        "image_list": note.get("image_list") if isinstance(note.get("image_list"), list) else [],
+        "image_list": _normalize_image_list_for_output(note.get("image_list")),
         "city_name": str(note.get("city_name") or ""),
         "content_text": str(note.get("content_text") or ""),
         "like_count": note.get("like_count"),

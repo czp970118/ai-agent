@@ -13,7 +13,8 @@
     "deploy:prod:next": "bash ./scripts/deploy-prod-next.sh",
     "deploy:prod:mcp": "bash ./scripts/deploy-prod-mcp.sh",
     "xhs:refresh-login": "bash ./scripts/refresh-xhs-login-and-upload.sh",
-    "pull:db": "bash ./scripts/pull-db.sh"
+    "pull:db": "bash ./scripts/pull-db.sh",
+    "deploy:force": "bash ./scripts/deploy-force.sh"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
