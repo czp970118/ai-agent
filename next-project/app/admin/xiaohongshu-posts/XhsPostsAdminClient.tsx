@@ -9,6 +9,7 @@ type NoteRow = {
   note_id: string;
   title: string;
   url: string;
+  image_list?: string[];
   content_text: string;
   like_count?: number | string;
   collect_count?: number | string;
@@ -30,6 +31,7 @@ const SORT_OPTIONS = [
 ] as const;
 
 const columns = [
+  { id: "image", name: "图片" },
   { id: "title", name: "标题" },
   { id: "content_text", name: "内容" },
   { id: "domains", name: "领域" },
@@ -371,7 +373,7 @@ export default function XhsPostsAdminClient() {
       <div className="mt-4">
         <Table className={ui.tableWrap}>
           <Table.ScrollContainer>
-            <Table.Content aria-label="小红书帖子表格" className="min-w-[1320px]">
+            <Table.Content aria-label="小红书帖子表格" className="min-w-[1420px]">
               <Table.Header columns={columns}>
                 {(column) => (
                   <Table.Column isRowHeader={column.id === "title"} className="whitespace-nowrap">
@@ -382,6 +384,20 @@ export default function XhsPostsAdminClient() {
               <Table.Body>
                 {notes.map((n) => (
                   <Table.Row key={n.note_id}>
+                    <Table.Cell>
+                      {Array.isArray(n.image_list) && n.image_list[0] ? (
+                        <img
+                          src={n.image_list[0]}
+                          alt={n.title || n.note_id}
+                          className="h-14 w-14 rounded-md border border-slate-200 object-cover dark:border-slate-700"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-md border border-slate-200 text-[10px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                          无图
+                        </div>
+                      )}
+                    </Table.Cell>
                     <Table.Cell>
                       <a
                         className="max-w-[220px] overflow-hidden font-medium text-sky-600 hover:underline [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
