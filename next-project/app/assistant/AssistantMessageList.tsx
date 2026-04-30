@@ -1,6 +1,14 @@
 import React from "react";
 import MessageContent from "./MessageContent";
 import type { Message } from "./utils/types";
+import { getMcpBaseUrl } from "./utils/mcpBaseUrl";
+
+function toCoverImageUrl(imagePath: string | undefined): string {
+  const p = String(imagePath || "").trim();
+  if (!p) return "";
+  if (/^https?:\/\//i.test(p)) return p;
+  return `${getMcpBaseUrl()}/chat/generated-image?path=${encodeURIComponent(p)}`;
+}
 
 type Props = {
   messages: Message[];
@@ -92,6 +100,16 @@ export default function AssistantMessageList({
                 </ul>
               </details>
             )}
+            {msg.role === "assistant" && msg.coverImagePath ? (
+              <div className="mt-1.5 rounded-xl border border-slate-200/90 bg-slate-50/80 p-2 dark:border-slate-600/80 dark:bg-slate-700/30">
+                <img
+                  src={toCoverImageUrl(msg.coverImagePath)}
+                  alt="生成封面图"
+                  className="h-auto w-full max-h-[320px] rounded-lg object-cover"
+                  loading="lazy"
+                />
+              </div>
+            ) : null}
             <div
               className={`flex justify-end items-center gap-0.5 pt-1 mt-0.5 ${
                 msg.role === "user"

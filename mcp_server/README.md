@@ -91,3 +91,29 @@ curl -N -X POST "http://127.0.0.1:8000/chat/stream" \
 ```
 
 如果未配置 `DEEPSEEK_API_KEY`，会收到 `error` + `end` 事件，这是预期行为。
+
+## 小红书文案 + 封面图联动（新增）
+
+`agent=xiaohongshu` 时，可在 `workflow` 里开启封面图生成：
+
+```json
+{
+  "agent": "xiaohongshu",
+  "messages": [{"role": "user", "content": "写一篇考公上岸经验"}],
+  "workflow": {
+    "generate_cover_image": true,
+    "cover": {
+      "style": "notion",
+      "layout": "sparse",
+      "palette": "macaron",
+      "title_main": "应届生3个月上岸考公",
+      "title_sub": "行测申论双70+｜我的复习路径公开"
+    }
+  }
+}
+```
+
+说明：
+- 会先写 prompt 到 `image-cards/{slug}/prompts/01-cover-{slug}.md`，再调用 `scripts/z-image-turbo.sh` 出图。
+- 出图结果会在 SSE 的 `end` 事件中返回 `cover_image` 字段。
+- 需要配置 `DASHSCOPE_API_KEY`。

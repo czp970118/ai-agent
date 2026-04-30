@@ -1,27 +1,23 @@
 import React from "react";
-import { Button, Checkbox, Input, TextArea } from "@heroui/react";
+import { Button, Input } from "@heroui/react";
 import type { AgentUiConfig } from "./agents";
 import type { Message } from "./utils/types";
 
 type Props = {
   isXHS: boolean;
-  standardMode: boolean;
+  showCoverStyleOption: boolean;
   loading: boolean;
   uiColor: "danger" | "success";
   fieldThemeClass: string;
-  checkboxActiveClass: string;
   ui: AgentUiConfig;
   input: string;
-  topic: string;
-  requirements: string;
-  autoImage: boolean;
+  coverStyle: string;
+  coverStyleOptions: Array<{ value: string; label: string }>;
   promptSwitchNode?: React.ReactNode;
   quotedMessage: Message | null;
-  onToggleStandardMode: () => void;
   onInputChange: (value: string) => void;
-  onTopicChange: (value: string) => void;
-  onRequirementsChange: (value: string) => void;
   onAutoImageChange: (selected: boolean) => void;
+  onCoverStyleChange: (value: string) => void;
   onClearQuote: () => void;
   onSubmit: (e: React.FormEvent) => void;
   onStop: () => void;
@@ -43,27 +39,43 @@ function StopIcon({ className }: { className?: string }) {
 
 export default function AssistantComposer({
   isXHS,
-  standardMode,
+  showCoverStyleOption,
   loading,
   uiColor,
   fieldThemeClass,
-  checkboxActiveClass,
   ui,
   input,
-  topic,
-  requirements,
-  autoImage,
+  coverStyle,
+  coverStyleOptions,
   promptSwitchNode,
   quotedMessage,
-  onToggleStandardMode,
   onInputChange,
-  onTopicChange,
-  onRequirementsChange,
   onAutoImageChange,
+  onCoverStyleChange,
   onClearQuote,
   onSubmit,
   onStop,
 }: Props) {
+  const [coverMenuOpen, setCoverMenuOpen] = React.useState(false);
+  const coverMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const currentCoverLabel =
+    coverStyleOptions.find((item) => item.value === coverStyle)?.label ?? "不生成封面";
+
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node | null;
+      if (coverMenuRef.current && target && !coverMenuRef.current.contains(target)) {
+        setCoverMenuOpen(false);
+      }
+    }
+    if (coverMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [coverMenuOpen]);
+
   return (
     <form
       onSubmit={onSubmit}
@@ -72,110 +84,57 @@ export default function AssistantComposer({
       {isXHS && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {promptSwitchNode}
-          <button
-            type="button"
-            disabled={loading}
-            onClick={onToggleStandardMode}
-            aria-pressed={standardMode}
-            className={`inline-flex items-center gap-2 rounded-[10px] border bg-white px-3.5 py-2 text-sm font-medium shadow-sm transition-colors dark:bg-slate-800 dark:shadow-none ${
-              standardMode
-                ? "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-950/50 dark:text-rose-100"
-                : "border-slate-200/90 text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700/60"
-            }`}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.75}
-              stroke="currentColor"
-              className="h-4 w-4 shrink-0 opacity-80"
-              aria-hidden
+          {showCoverStyleOption ? (
+          <div className="relative inline-flex items-center" ref={coverMenuRef}>
+            <button
+              type="button"
+              onClick={() => setCoverMenuOpen((v) => !v)}
+              disabled={loading}
+              className="inline-flex h-9 items-center gap-1 rounded-[10px] border border-slate-200/90 bg-white px-3.5 text-[10px] font-medium text-slate-800 shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-              />
-            </svg>
-            标准模式
-          </button>
+              <span className="max-w-[88px] truncate whitespace-nowrap">{currentCoverLabel}</span>
+              <span className="text-[9px] text-slate-400">▼</span>
+            </button>
+            {coverMenuOpen ? (
+              <div className="absolute bottom-[calc(100%+6px)] left-0 z-50 w-[120px] rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                <div className="grid gap-1">
+                  {coverStyleOptions.map((item) => {
+                    const active = item.value === coverStyle;
+                    return (
+                      <button
+                        key={item.value}
+                        type="button"
+                        className={`w-full rounded-md px-2 py-1 text-left text-[11px] transition ${
+                          active
+                            ? "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+                            : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                        }`}
+                        onClick={() => {
+                          onCoverStyleChange(item.value);
+                          onAutoImageChange(item.value !== "off");
+                          setCoverMenuOpen(false);
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          ) : null}
         </div>
       )}
 
       <div
-        className={`rounded-[22px] border border-slate-200/70 bg-white shadow-[0_2px_14px_rgba(15,23,42,0.07)] dark:border-slate-700/80 dark:bg-slate-900 dark:shadow-[0_2px_18px_rgba(0,0,0,0.35)] ${
-          isXHS && standardMode ? "p-3" : "p-1.5"
-        }`}
+        className="rounded-[22px] border border-slate-200/70 bg-white p-1.5 shadow-[0_2px_14px_rgba(15,23,42,0.07)] dark:border-slate-700/80 dark:bg-slate-900 dark:shadow-[0_2px_18px_rgba(0,0,0,0.35)]"
       >
-        {isXHS && standardMode ? (
-          <div className="space-y-2.5">
-            <Input
-              variant="secondary"
-              fullWidth
-              value={topic}
-              onChange={(e) => onTopicChange(e.target.value)}
-              placeholder="主题（必填）"
-              disabled={loading}
-              className="rounded-xl border border-slate-200/90 bg-slate-50/50 dark:border-slate-600 dark:bg-slate-800/50"
-            />
-            <TextArea
-              variant="secondary"
-              fullWidth
-              value={requirements}
-              onChange={(e) => onRequirementsChange(e.target.value)}
-              placeholder="主要内容"
-              disabled={loading}
-              rows={3}
-              className="rounded-xl border border-slate-200/90 bg-slate-50/50 dark:border-slate-600 dark:bg-slate-800/50"
-            />
-            <Checkbox
-              isSelected={autoImage}
-              onChange={(selected) => onAutoImageChange(selected)}
-              isDisabled={loading}
-              variant="secondary"
-              className="items-center gap-2"
-            >
-              <Checkbox.Control
-                className={`h-4 w-4 rounded border border-slate-400 ${checkboxActiveClass}`}
-              >
-                <Checkbox.Indicator className="text-white" />
-              </Checkbox.Control>
-              <Checkbox.Content className="text-sm text-slate-700 dark:text-slate-200">
-                是否自动生成图片
-              </Checkbox.Content>
-            </Checkbox>
-            <div className="flex justify-end pt-0.5">
-              {loading ? (
-                <Button
-                  type="button"
-                  aria-label="停止生成"
-                  onPress={onStop}
-                  className="min-w-[88px] rounded-full bg-slate-700 font-medium text-white hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500"
-                >
-                  <StopIcon className="mx-auto h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  isDisabled={!topic.trim() || !requirements.trim()}
-                  className={`min-w-[88px] rounded-full font-medium ${
-                    uiColor === "danger"
-                      ? "bg-rose-600 text-white"
-                      : "bg-teal-600 text-white"
-                  }`}
-                >
-                  发送
-                </Button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div
-            className={`rounded-[20px] px-2 py-1 ${
-              isXHS ? "bg-slate-50/95 dark:bg-slate-800/90" : fieldThemeClass
-            }`}
-          >
+        <div
+          className={`rounded-[20px] px-2 py-1 ${
+            isXHS ? "bg-slate-50/95 dark:bg-slate-800/90" : fieldThemeClass
+          }`}
+        >
             {quotedMessage && (
               <div className="mb-1 rounded-lg border border-slate-200/90 bg-slate-100/75 px-3 py-2 text-left dark:border-slate-600/70 dark:bg-slate-700/35">
                 <div className="mb-1 flex items-start justify-between gap-2">
@@ -247,8 +206,7 @@ export default function AssistantComposer({
                 </Button>
               )}
             </div>
-          </div>
-        )}
+        </div>
       </div>
     </form>
   );

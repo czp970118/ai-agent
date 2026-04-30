@@ -47,6 +47,32 @@ type PromptStyle = {
 };
 
 const DOMAIN_OPTIONS = ["旅游", "考公", "穿搭", "吃喝", "职场", "健身", "情感"] as const;
+const COVER_STYLE_OPTIONS = [
+  { value: "off", label: "不生成封面" },
+  { value: "fresh", label: "清新" },
+  { value: "warm", label: "温暖" },
+  { value: "retro", label: "复古" },
+  { value: "notion", label: "知识" },
+  { value: "chalkboard", label: "黑板" },
+  { value: "study-notes", label: "手记" },
+  { value: "minimal", label: "极简" },
+  { value: "bold", label: "醒目" },
+  { value: "cute", label: "可爱" },
+  { value: "pop", label: "潮流" },
+] as const;
+
+function recommendCoverStyleByDomain(domain: string): string {
+  const map: Record<string, string> = {
+    旅游: "fresh",
+    考公: "notion",
+    穿搭: "cute",
+    吃喝: "warm",
+    职场: "minimal",
+    健身: "bold",
+    情感: "warm",
+  };
+  return map[domain] || "notion";
+}
 
 export default function AssistantClient({ agentId }: Props) {
   const isXHS = agentId === "xiaohongshu";
@@ -54,9 +80,6 @@ export default function AssistantClient({ agentId }: Props) {
   const fieldThemeClass = isXHS
     ? "bg-rose-50/70 border-rose-200 dark:bg-slate-800 dark:border-slate-700"
     : "bg-teal-50/60 border-teal-200 dark:bg-slate-800 dark:border-slate-700";
-  const checkboxActiveClass = isXHS
-    ? "data-[selected=true]:border-rose-500 data-[selected=true]:bg-rose-500"
-    : "data-[selected=true]:border-teal-500 data-[selected=true]:bg-teal-500";
   const ui = agentUi[agentId];
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -64,10 +87,9 @@ export default function AssistantClient({ agentId }: Props) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [hydratingSession, setHydratingSession] = useState(true);
   const [input, setInput] = useState("");
-  const [standardMode, setStandardMode] = useState(false);
-  const [topic, setTopic] = useState("");
-  const [requirements, setRequirements] = useState("");
   const [autoImage, setAutoImage] = useState(false);
+  const [coverStyle, setCoverStyle] = useState("off");
+  const [coverStyleTouched, setCoverStyleTouched] = useState(false);
   const [currentDomainStyles, setCurrentDomainStyles] = useState<PromptStyle[]>([]);
   const [selectedDomain, setSelectedDomain] = useState("旅游");
   const [selectedPromptId, setSelectedPromptId] = useState("");
@@ -110,7 +132,21 @@ export default function AssistantClient({ agentId }: Props) {
   useEffect(() => {
     setSelectedDomain("旅游");
     setSelectedPromptId("");
+    setCoverStyle("off");
+    setCoverStyleTouched(false);
   }, [agentId]);
+
+  useEffect(() => {
+    if (!autoImage || coverStyleTouched) return;
+    setCoverStyle(recommendCoverStyleByDomain(selectedDomain));
+  }, [autoImage, coverStyleTouched, selectedDomain]);
+
+  useEffect(() => {
+    if (selectedDomain === "考公") return;
+    setAutoImage(false);
+    setCoverStyle("off");
+    setCoverStyleTouched(false);
+  }, [selectedDomain]);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,12 +243,13 @@ export default function AssistantClient({ agentId }: Props) {
     id: string,
     content: string,
     references?: MessageReference[],
-    searchMeta?: MessageSearchMeta
+    searchMeta?: MessageSearchMeta,
+    coverImagePath?: string
   ) {
     setMessages((prev) => {
       const idx = prev.findIndex((m) => m.id === id);
       if (idx === -1) {
-        return [...prev, { id, role: "assistant", content, references }];
+        return [...prev, { id, role: "assistant", content, references, coverImagePath }];
       }
       const next = [...prev];
       next[idx] = {
@@ -220,6 +257,7 @@ export default function AssistantClient({ agentId }: Props) {
         content,
         references: references ?? next[idx]?.references,
         searchMeta: searchMeta ?? next[idx]?.searchMeta,
+        coverImagePath: coverImagePath ?? next[idx]?.coverImagePath,
       };
       return next;
     });
@@ -248,12 +286,17 @@ export default function AssistantClient({ agentId }: Props) {
         "search_meta" in meta
           ? normalizeSearchMeta((meta as { search_meta?: unknown }).search_meta)
           : undefined;
+      const coverImagePath =
+        "cover_image_path" in meta && typeof (meta as { cover_image_path?: unknown }).cover_image_path === "string"
+          ? String((meta as { cover_image_path: string }).cover_image_path)
+          : undefined;
       out.push({
         id: String(row.id ?? createClientId()),
         role,
         content,
         references: refs.length ? refs : undefined,
         searchMeta,
+        coverImagePath,
       });
     }
     return out;
@@ -425,6 +468,7 @@ export default function AssistantClient({ agentId }: Props) {
     content: string;
     references: MessageReference[];
     searchMeta?: MessageSearchMeta;
+    coverImagePath?: string;
   }> {
     const wf: Record<string, unknown> = { ...(workflowPayload ?? {}) };
     wf.user_id = getSessionUserId();
@@ -454,6 +498,7 @@ export default function AssistantClient({ agentId }: Props) {
     let content = "";
     let lastReferences: MessageReference[] = [];
     let lastSearchMeta: MessageSearchMeta | undefined;
+    let coverImagePath = "";
 
     while (true) {
       const { value, done } = await reader.read();
@@ -502,9 +547,35 @@ export default function AssistantClient({ agentId }: Props) {
               typeof evt.data === "object" && evt.data && "search_meta" in evt.data
                 ? normalizeSearchMeta((evt.data as { search_meta?: unknown }).search_meta)
                 : undefined;
+            const endCoverImagePath =
+              typeof evt.data === "object" &&
+              evt.data &&
+              "cover_image" in evt.data &&
+              typeof (evt.data as { cover_image?: unknown }).cover_image === "object" &&
+              (evt.data as { cover_image?: { ok?: unknown; image_path?: unknown } }).cover_image &&
+              (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } }).cover_image.ok === true &&
+              typeof (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } }).cover_image.image_path === "string"
+                ? String((evt.data as { cover_image: { image_path: string } }).cover_image.image_path)
+                : "";
+            const endCoverImageError =
+              typeof evt.data === "object" &&
+              evt.data &&
+              "cover_image" in evt.data &&
+              typeof (evt.data as { cover_image?: unknown }).cover_image === "object" &&
+              (evt.data as { cover_image?: { ok?: unknown; error?: unknown } }).cover_image &&
+              (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image.ok === false &&
+              typeof (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image.error === "string"
+                ? String((evt.data as { cover_image: { error: string } }).cover_image.error)
+                : "";
 
-            const finalContent = (endContent || content || "").trim() || "没有收到回复。";
-            upsertAssistantMessage(assistantMessageId, finalContent, endRefs, endSearchMeta);
+            let finalContent = (endContent || content || "").trim() || "没有收到回复。";
+            if (endCoverImagePath) {
+              coverImagePath = endCoverImagePath;
+              finalContent = `${finalContent}\n\n封面图已生成`;
+            } else if (endCoverImageError) {
+              finalContent = `${finalContent}\n\n封面图生成失败：${endCoverImageError}`;
+            }
+            upsertAssistantMessage(assistantMessageId, finalContent, endRefs, endSearchMeta, endCoverImagePath || undefined);
             content = finalContent;
             lastReferences = endRefs;
             lastSearchMeta = endSearchMeta;
@@ -516,6 +587,7 @@ export default function AssistantClient({ agentId }: Props) {
       content: content.trim() || "没有收到回复。",
       references: lastReferences,
       searchMeta: lastSearchMeta,
+      coverImagePath: coverImagePath || undefined,
     };
   }
 
@@ -527,6 +599,7 @@ export default function AssistantClient({ agentId }: Props) {
     content: string;
     references: MessageReference[];
     searchMeta?: MessageSearchMeta;
+    coverImagePath?: string;
   }> {
     const assistantMessageId = createClientId();
     streamingAssistantIdRef.current = assistantMessageId;
@@ -649,39 +722,16 @@ export default function AssistantClient({ agentId }: Props) {
 
     let text = input.trim();
     let workflowPayload: Record<string, unknown> | null = null;
-    if (isXHS && standardMode) {
-      const topicValue = topic.trim();
-      const requirementsValue = requirements.trim();
-      if (!topicValue || !requirementsValue) return;
-      text = [
-        "【标准输入模式】",
-        `主题：${topicValue}`,
-        `主要内容：${requirementsValue}`,
-        `是否自动生成图片：${autoImage ? "是" : "否"}`,
-        "请按小红书笔记格式输出，包含标题、正文和可选话题标签。",
-      ].join("\n");
-      workflowPayload = {
-        agent: agentId,
-        mode: "standard",
-        topic: topicValue,
-        requirements: requirementsValue,
-        autoImage,
-        prompt: text,
-        prompt_domain: selectedDomain || undefined,
-        prompt_domains: selectedDomain ? [selectedDomain] : [],
-        prompt_style_id: selectedPromptId || undefined,
-        prompt_style_name: selectedPrompt?.name || undefined,
-        prompt_candidates: currentDomainStyles.map((item) => ({
-          id: item.id,
-          name: item.name,
-          is_default: !!item.is_default,
-          body: String(item.body ?? item.body_preview ?? ""),
-        })),
-      };
-    } else if (isXHS) {
+    if (isXHS) {
       workflowPayload = {
         agent: agentId,
         mode: "default",
+        generate_cover_image: autoImage && coverStyle !== "off",
+        cover: {
+          style: coverStyle,
+          title_main: text.slice(0, 24) || "小红书封面",
+          title_sub: "",
+        },
         prompt: text,
         prompt_domain: selectedDomain || undefined,
         prompt_domains: selectedDomain ? [selectedDomain] : [],
@@ -726,11 +776,6 @@ export default function AssistantClient({ agentId }: Props) {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setQuotedMessage(null);
-    if (isXHS && standardMode) {
-      setTopic("");
-      setRequirements("");
-      setAutoImage(false);
-    }
 
     const generated = await withInFlightAbort((signal) =>
       executeAgentRun(
@@ -760,6 +805,7 @@ export default function AssistantClient({ agentId }: Props) {
                   query_terms: generated.searchMeta.queryTerms,
                 }
               : undefined,
+            cover_image_path: generated.coverImagePath,
           },
         },
       ]);
@@ -783,7 +829,17 @@ export default function AssistantClient({ agentId }: Props) {
     const userMsg = messages[prevUserIdx]!;
     const truncated = messages.slice(0, idx);
     const workflowPayload = isXHS
-      ? { agent: agentId, mode: "default", prompt: userMsg.content }
+      ? {
+          agent: agentId,
+          mode: "default",
+          prompt: userMsg.content,
+          generate_cover_image: autoImage && coverStyle !== "off",
+          cover: {
+            style: coverStyle,
+            title_main: userMsg.content.slice(0, 24) || "小红书封面",
+            title_sub: "",
+          },
+        }
       : null;
 
     flushSync(() => {
@@ -887,16 +943,12 @@ export default function AssistantClient({ agentId }: Props) {
 
         <AssistantComposer
           isXHS={isXHS}
-          standardMode={standardMode}
+          showCoverStyleOption={isXHS && selectedDomain === "考公"}
           loading={loading}
           uiColor={uiColor}
           fieldThemeClass={fieldThemeClass}
-          checkboxActiveClass={checkboxActiveClass}
           ui={ui}
           input={input}
-          topic={topic}
-          requirements={requirements}
-          autoImage={autoImage}
           promptSwitchNode={
             <button
               type="button"
@@ -912,11 +964,19 @@ export default function AssistantClient({ agentId }: Props) {
             </button>
           }
           quotedMessage={quotedMessage}
-          onToggleStandardMode={() => setStandardMode((v) => !v)}
           onInputChange={setInput}
-          onTopicChange={setTopic}
-          onRequirementsChange={setRequirements}
           onAutoImageChange={setAutoImage}
+          coverStyle={coverStyle}
+          coverStyleOptions={COVER_STYLE_OPTIONS.map((item) => ({ ...item }))}
+          onCoverStyleChange={(value) => {
+            setCoverStyle(value);
+            setCoverStyleTouched(true);
+            if (value === "off") {
+              setAutoImage(false);
+            } else {
+              setAutoImage(true);
+            }
+          }}
           onClearQuote={() => setQuotedMessage(null)}
           onSubmit={handleSubmit}
           onStop={stopInFlight}

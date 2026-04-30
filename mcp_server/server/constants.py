@@ -10,14 +10,21 @@ SENTENCE_ANALYSIS_PROMPT = (
     "- city_name: 城市名（字符串，可空；若能识别请尽量给出，如“湛江”）"
     "- requirements: 其他具体要求关键词（字符串数组，最多5个，可空）"
     "- page_size: 主题词搜索条数（可空，默认15）"
+    "- cover: 封面图参数对象（可空）"
+    "  - style: 风格，如 fresh/notion/warm（可空）"
+    "  - title_main: 封面主标题（可空）"
+    "  - title_sub: 封面副标题（可空）"
+    "  - layout: 布局，如 sparse/balanced（可空）"
+    "  - palette: 配色，如 macaron/warm/neon（可空）"
     "规则："
     "1) topic 只保留一个最核心词，且尽量是“目的地+场景”（如“广州旅游”“杭州美食”），不要只输出城市名。"
     "2) requirements 只保留与 topic 强相关的具体要素（如广州塔、美食、拍照打卡、3日游、路线、住宿、预算）。"
     "3) requirements 不要放泛化任务词（如“旅游攻略”“写一篇”“帮我”），也不要重复 topic 本身，不要输出空字符串。"
     "4) page_size 若缺失，输出 15。"
     "5) city_name 不是搜索词，仅用于缓存和结果过滤；无法判断时输出空字符串。"
-    "6) 只输出纯 JSON，不要解释、不要 Markdown。"
-    "顶层字段只能是：topic、city_name、requirements、page_size。"
+    "6) 封面文案尽量短，主标题建议 8-18 字，副标题建议 8-22 字。"
+    "7) 只输出纯 JSON，不要解释、不要 Markdown。"
+    "顶层字段只能是：topic、city_name、requirements、page_size、cover。"
 )
 
 XIAOHONGSHU_PUBLISH_SKILL_PATH = (

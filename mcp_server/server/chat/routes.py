@@ -2,12 +2,13 @@ import asyncio
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 import httpx
 from fastapi import APIRouter
 from fastapi import HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field 
 
 from ..constants import (
@@ -17,6 +18,7 @@ from ..constants import (
     load_xiaohongshu_publish_prompt,
     SENTENCE_ANALYSIS_PROMPT,
 )
+from ..xhs.xhs_cover_image import generate_xhs_cover_image
 from ..xhs.xhs_search import search_xhs_keyword_and_poll_details as search_impl
 from .memory_store import (
     append_messages,
@@ -37,6 +39,7 @@ from .prompt_library_store import (
 
 chat_router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger("mcp_server.chat")
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 AGENT_SYSTEM_PROMPTS: dict[str, str] = {
     "xiaohongshu": load_xiaohongshu_publish_prompt(),
@@ -156,6 +159,28 @@ def _normalize_city_name(value: Any) -> str:
     return text[:32]
 
 
+def _normalize_cover_config(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    style = str(value.get("style") or "").strip()
+    title_main = str(value.get("title_main") or "").strip()
+    title_sub = str(value.get("title_sub") or "").strip()
+    layout = str(value.get("layout") or "").strip()
+    palette = str(value.get("palette") or "").strip()
+    out: dict[str, Any] = {}
+    if style:
+        out["style"] = style[:32]
+    if title_main:
+        out["title_main"] = title_main[:40]
+    if title_sub:
+        out["title_sub"] = title_sub[:48]
+    if layout:
+        out["layout"] = layout[:24]
+    if palette:
+        out["palette"] = palette[:24]
+    return out
+
+
 def _fallback_plan_xiaohongshu_params(messages: list[dict[str, Any]]) -> dict[str, Any]:
     user_input = _extract_last_user_message(messages)
     if not user_input:
@@ -175,16 +200,24 @@ async def _plan_xiaohongshu_params(
     api_key: str,
     model: str,
     messages: list[dict[str, Any]],
+    enable_cover_planning: bool = False,
 ) -> dict[str, Any]:
     chat_input = _extract_last_user_message(messages)
     if not chat_input:
         return {"ok": False, "error": "无法解析用户输入"}
 
+    system_prompt = SENTENCE_ANALYSIS_PROMPT
+    if enable_cover_planning:
+        system_prompt = (
+            f"{SENTENCE_ANALYSIS_PROMPT}"
+            "本次需要生成封面参数，请务必输出 cover 对象，并尽量给出 title_main 与 title_sub。"
+        )
+
     payload = {
         "model": model,
         "stream": False,
         "messages": [
-            {"role": "system", "content": SENTENCE_ANALYSIS_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"chatInput: {chat_input}"},
         ],
         "temperature": 0.2,
@@ -249,12 +282,14 @@ async def _plan_xiaohongshu_params(
     requirements = _normalize_requirements(parsed.get("requirements"), topic)
     page_size = _normalize_page_size(parsed.get("page_size"))
     city_name = _normalize_city_name(parsed.get("city_name"))
+    cover = _normalize_cover_config(parsed.get("cover"))
     return {
         "ok": True,
         "topic": topic,
         "city_name": city_name,
         "requirements": requirements,
         "page_size": page_size,
+        "cover": cover,
     }
 
 
@@ -357,6 +392,26 @@ def _extract_xhs_references_and_meta(
     }
 
 
+@chat_router.get("/generated-image")
+async def get_generated_image(path: str = Query(..., min_length=1)) -> FileResponse:
+    raw = str(path or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="path is required")
+    target = Path(raw)
+    if not target.is_absolute():
+        target = REPO_ROOT / target
+    try:
+        target_resolved = target.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="image not found") from exc
+
+    allowed_root = (REPO_ROOT / "image-cards").resolve()
+    if allowed_root not in target_resolved.parents and target_resolved != allowed_root:
+        raise HTTPException(status_code=403, detail="path not allowed")
+
+    return FileResponse(target_resolved)
+
+
 @chat_router.post("/stream")
 async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
     if not body.messages:
@@ -377,6 +432,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
     async def event_stream():
         trace_id = uuid4().hex[:12]
         xhs_display_meta: dict[str, Any] | None = None
+        planned: dict[str, Any] = {}
         logger.info(
             "chat_stream_start trace_id=%s agent=%s message_count=%s",
             trace_id,
@@ -393,7 +449,12 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
         final_messages = [{"role": "system", "content": system_prompt}, *working_messages]
 
         if (body.agent or "").strip() == "xiaohongshu":
-            planned = await _plan_xiaohongshu_params(api_key=api_key, model=model, messages=working_messages)
+            planned = await _plan_xiaohongshu_params(
+                api_key=api_key,
+                model=model,
+                messages=working_messages,
+                enable_cover_planning=bool(wf.get("generate_cover_image")),
+            )
             if not planned.get("ok"):
                 fallback = _fallback_plan_xiaohongshu_params(working_messages)
                 if not fallback.get("ok"):
@@ -415,10 +476,24 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                         "city_name": planned.get("city_name"),
                         "requirements": planned.get("requirements"),
                         "page_size": planned.get("page_size"),
+                        "cover": planned.get("cover"),
                     },
                     ensure_ascii=False,
                 ),
             )
+            if bool(wf.get("generate_cover_image")):
+                planned_cover_raw = planned.get("cover")
+                planned_cover: dict[str, Any] = (
+                    dict(planned_cover_raw) if isinstance(planned_cover_raw, dict) else {}
+                )
+                existing_cover_raw = wf.get("cover")
+                existing_cover: dict[str, Any] = (
+                    dict(existing_cover_raw) if isinstance(existing_cover_raw, dict) else {}
+                )
+                merged_cover: dict[str, Any] = {}
+                merged_cover.update(planned_cover)
+                merged_cover.update(existing_cover)
+                wf["cover"] = merged_cover
             yield _sse("stage", {"name": "planned", "params": planned})
 
             xhs_request_payload = {
@@ -560,11 +635,17 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
         end_payload: dict[str, Any] = {"ok": True, "content": final_text}
         if (body.agent or "").strip() == "xiaohongshu":
             xhs_meta = xhs_display_meta or {"references": [], "search_meta": {"query_count": 0, "query_terms": []}}
+            cover_result = generate_xhs_cover_image(
+                topic=str(planned.get("topic") or "小红书封面"),
+                content=final_text,
+                workflow=wf,
+            )
             end_payload = {
                 "ok": True,
                 "content": final_text,
                 "references": xhs_meta.get("references") or [],
                 "search_meta": xhs_meta.get("search_meta") or {"query_count": 0, "query_terms": []},
+                "cover_image": cover_result,
             }
             logger.info(
                 "xhs_generation_result trace_id=%s payload=%s",
@@ -574,6 +655,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
                         "length": len(final_text),
                         "preview": final_text[:600],
                         "references_count": len(end_payload.get("references", [])),
+                        "cover_image_ok": bool((end_payload.get("cover_image") or {}).get("ok")),
                     },
                     ensure_ascii=False,
                 ),

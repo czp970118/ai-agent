@@ -14,6 +14,7 @@ export type Message = {
   content: string;
   references?: MessageReference[];
   searchMeta?: MessageSearchMeta;
+  coverImagePath?: string;
 };
 
 export type McpStreamEvent = {
