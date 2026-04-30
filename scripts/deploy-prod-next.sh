@@ -12,7 +12,7 @@ echo "[deploy-prod-next] build=$DO_BUILD"
 SSH_CMD="cd $REMOTE_DIR && git fetch origin && git reset --hard origin/master"
 
 if [ "$DO_BUILD" = "1" ]; then
-  SSH_CMD="$SSH_CMD && docker compose build next && docker compose up -d --force-recreate next"
+  SSH_CMD="$SSH_CMD && rm -rf next-project/.next && docker compose up -d --force-recreate next"
 else
   SSH_CMD="$SSH_CMD && docker compose up -d --no-build next"
 fi
