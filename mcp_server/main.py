@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from server.chat import chat_router
 from server.search import search_router
+from server.xhs.xhs_scheduler import xhs_scheduler_service
 
 
 def _load_env_file() -> None:
@@ -40,6 +41,16 @@ http_app.add_middleware(
 )
 http_app.include_router(chat_router)
 http_app.include_router(search_router)
+
+
+@http_app.on_event("startup")
+async def _on_startup() -> None:
+    xhs_scheduler_service.start()
+
+
+@http_app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    await xhs_scheduler_service.stop()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run HTTP gateway")

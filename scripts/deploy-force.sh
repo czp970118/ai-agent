@@ -13,7 +13,7 @@ echo "[deploy-force] build=$DO_BUILD"
 echo "[deploy-force] apt_mirror=$APT_MIRROR"
 echo "[deploy-force] playwright_download_host=${PLAYWRIGHT_DOWNLOAD_HOST:-<default>}"
 
-SSH_CMD="cd $REMOTE_DIR && git fetch origin && git reset --hard origin/master && rm -rf next-project/.next"
+SSH_CMD="cd $REMOTE_DIR && git fetch origin && git reset --hard origin/master && test -f next-project/env.compose || cp next-project/env.compose.example next-project/env.compose && rm -rf next-project/.next"
 
 if [ "$DO_BUILD" = "1" ]; then
   SSH_CMD="$SSH_CMD && docker compose build --build-arg APT_MIRROR=$APT_MIRROR --build-arg PLAYWRIGHT_DOWNLOAD_HOST=$PLAYWRIGHT_DOWNLOAD_HOST mcp next && docker compose up -d --force-recreate mcp next"

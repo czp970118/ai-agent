@@ -53,6 +53,8 @@ wheels/
 # Local env secrets
 .env
 .env.local
+# compose.yml next 服务注入（从 env.compose.example 复制）
+/env.compose
 
 # Playwright storage state (do not commit)
 server/xhs/xhs_storage_state.json
