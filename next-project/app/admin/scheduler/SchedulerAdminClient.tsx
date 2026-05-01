@@ -25,6 +25,17 @@ type TaskListResp = {
   items?: TaskItem[];
 };
 
+function generateRandomTimePoints(count: number): string[] {
+  const target = Math.max(1, count);
+  const picked = new Set<string>();
+  while (picked.size < target) {
+    const hour = 8 + Math.floor(Math.random() * 16);
+    const minute = Math.floor(Math.random() * 60);
+    picked.add(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+  }
+  return [...picked].sort((a, b) => a.localeCompare(b));
+}
+
 function getMcpBaseUrl(): string {
   const env = process.env.NEXT_PUBLIC_MCP_SERVER_URL?.trim();
   if (env) return env.replace(/\/+$/, "");
@@ -192,6 +203,9 @@ export default function SchedulerAdminClient() {
   }
 
   const pendingCount = useMemo(() => tasks.filter((t) => t.status === "PENDING").length, [tasks]);
+  const randomizeTimePoints = useCallback(() => {
+    setTimePoints(generateRandomTimePoints(fetchCount));
+  }, [fetchCount]);
 
   return (
     <section className={ui.page}>
@@ -342,19 +356,36 @@ export default function SchedulerAdminClient() {
               onChange={(e) => setRepeatCount(Number(e.target.value || 1))}
             />
           </label>
-          <div className="grid gap-2">
-            <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={emailEnabled}
-                onChange={(e) => setEmailEnabled(e.target.checked)}
-              />
-              该任务发送邮件
-            </label>
+          <div className="grid gap-1">
+            <span className={ui.hint}>是否发送邮件</span>
+            <button
+              type="button"
+              onClick={() => setEmailEnabled((prev) => !prev)}
+              className="inline-flex h-10 w-fit items-center gap-2 rounded-lg border-slate-200 bg-white px-3 text-left transition"
+              aria-pressed={emailEnabled}
+            >
+              <span className="text-sm text-slate-700 dark:text-slate-200">{emailEnabled ? "发送邮件通知" : "不发邮件通知"}</span>
+              <span
+                className={`inline-flex h-5 w-9 items-center rounded-full p-0.5 transition ${
+                  emailEnabled ? "bg-sky-500" : "bg-slate-300 dark:bg-slate-600"
+                }`}
+              >
+                <span
+                  className={`h-4 w-4 rounded-full bg-white shadow transition ${
+                    emailEnabled ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </span>
+            </button>
           </div>
         </div>
         <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-3 dark:border-slate-700 dark:bg-slate-900/70">
-          <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">抓取时间点与主题（长度必须与抓取次数一致）</p>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">抓取时间点与主题（长度必须与抓取次数一致）</p>
+            <button type="button" className={ui.buttonSecondary} onClick={randomizeTimePoints}>
+              一键随机生成时间点
+            </button>
+          </div>
           <div className="grid gap-2">
             {Array.from({ length: fetchCount }, (_, idx) => (
               <div key={`slot-${idx}`} className="grid gap-2 md:grid-cols-[140px_1fr]">
@@ -398,29 +429,29 @@ export default function SchedulerAdminClient() {
         <table className={`${ui.table} min-w-[1280px]`}>
           <thead className={`${ui.tableHeader} sticky top-0 z-10`}>
             <tr>
-              <th className="whitespace-nowrap px-3 py-2 text-left">状态</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Source</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">执行日期</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">城市</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">领域</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">时间点</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">主题</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">进度</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">抓取设置</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">操作</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">状态</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">Source</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">执行日期</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">城市</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">领域</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">时间点</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">主题</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">进度</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">抓取设置</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left align-middle">操作</th>
             </tr>
           </thead>
           <tbody>
             {tasks.map((t) => (
               <tr key={t.task_id} className={ui.tableRow}>
-                <td className="px-3 py-2 text-xs">
+                <td className="px-3 py-2 text-xs align-middle">
                   <span className={`inline-flex rounded-md border px-2 py-0.5 ${taskStatusClass(t.status)}`}>{t.status}</span>
                 </td>
-                <td className="px-3 py-2 text-xs">{t.source}</td>
-                <td className="px-3 py-2 text-xs">{t.run_date || "-"}</td>
-                <td className="px-3 py-2 text-xs">{t.city}</td>
-                <td className="px-3 py-2 text-xs">{t.domain || "-"}</td>
-                <td className="px-3 py-2 text-xs">
+                <td className="px-3 py-2 text-xs align-middle">{t.source}</td>
+                <td className="px-3 py-2 text-xs align-middle">{t.run_date || "-"}</td>
+                <td className="px-3 py-2 text-xs align-middle">{t.city}</td>
+                <td className="px-3 py-2 text-xs align-middle">{t.domain || "-"}</td>
+                <td className="px-3 py-2 text-xs align-middle">
                   <div className="flex flex-wrap gap-1.5">
                     {(t.time_points || []).map((tp, idx) => (
                       <span
@@ -432,7 +463,7 @@ export default function SchedulerAdminClient() {
                     ))}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-xs">
+                <td className="px-3 py-2 text-xs align-middle">
                   <div className="flex flex-wrap gap-1.5">
                     {(t.topics || []).map((topic, idx) => (
                       <span
@@ -444,7 +475,7 @@ export default function SchedulerAdminClient() {
                     ))}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-xs">
+                <td className="px-3 py-2 text-xs align-middle">
                   {(() => {
                     const slotResults = t.slot_results && typeof t.slot_results === "object" ? t.slot_results : {};
                     const done = Array.from({ length: t.fetch_count }, (_, i) => {
@@ -454,7 +485,7 @@ export default function SchedulerAdminClient() {
                     return `${done}/${t.fetch_count}`;
                   })()}
                 </td>
-                <td className="px-3 py-2 text-xs">
+                <td className="px-3 py-2 text-xs align-middle">
                   <div className="flex flex-wrap gap-1.5">
                     <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] dark:border-slate-700 dark:bg-slate-800">
                       次数 {t.fetch_count}
@@ -467,7 +498,7 @@ export default function SchedulerAdminClient() {
                     </span>
                   </div>
                 </td>
-                <td className="px-3 py-2 text-xs">
+                <td className="px-3 py-2 text-xs align-middle">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -491,7 +522,7 @@ export default function SchedulerAdminClient() {
             ))}
             {!tasks.length ? (
               <tr>
-                <td className="px-3 py-3 text-xs text-slate-500" colSpan={10}>
+                <td className="px-3 py-3 text-xs text-slate-500 align-middle" colSpan={10}>
                   暂无任务实例
                 </td>
               </tr>
