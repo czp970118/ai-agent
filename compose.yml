@@ -28,7 +28,7 @@ services:
       - NODE_OPTIONS=--max-old-space-size=1024
     command: >
       sh -lc "if [ ! -d node_modules ]; then npm ci --include=dev; fi &&
-              if [ ! -d .next ]; then npm run build; fi &&
+              if [ ! -f .next/BUILD_ID ]; then npm run build; fi &&
               exec npm run start -- --hostname 0.0.0.0 --port 3000"
     volumes:
       - ./:/app
