@@ -720,7 +720,7 @@ export default function AssistantClient({ agentId }: Props) {
     e.preventDefault();
     if (loading) return;
 
-    let text = input.trim();
+    const text = input.trim();
     let workflowPayload: Record<string, unknown> | null = null;
     if (isXHS) {
       workflowPayload = {
