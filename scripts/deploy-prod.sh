@@ -16,7 +16,7 @@ echo "[deploy-prod] playwright_download_host=${PLAYWRIGHT_DOWNLOAD_HOST:-<defaul
 SSH_CMD="cd $REMOTE_DIR && git fetch origin && git reset --hard origin/master"
 
 if [ "$DO_BUILD" = "1" ]; then
-  SSH_CMD="$SSH_CMD && docker compose build --build-arg APT_MIRROR=$APT_MIRROR --build-arg PLAYWRIGHT_DOWNLOAD_HOST=$PLAYWRIGHT_DOWNLOAD_HOST mcp next && docker compose up -d --force-recreate mcp next"
+  SSH_CMD="$SSH_CMD && rm -rf next-project/.next && docker compose build --build-arg APT_MIRROR=$APT_MIRROR --build-arg PLAYWRIGHT_DOWNLOAD_HOST=$PLAYWRIGHT_DOWNLOAD_HOST mcp next && docker compose up -d --force-recreate mcp next"
 else
   SSH_CMD="$SSH_CMD && docker compose up -d --no-build mcp next"
 fi
