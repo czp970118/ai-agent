@@ -7,6 +7,7 @@ services:
     working_dir: /app/mcp_server
     environment:
       - DEEPSEEK_API_KEY=sk-a72f266d06804417825f205b6cc360d2
+      - DASHSCOPE_API_KEY=sk-6b43a18c324a4380885b6d3ff0274ffb
     command: >
       sh -lc "uv run python -m uvicorn main:http_app --host 0.0.0.0 --port 8000"
     volumes:
