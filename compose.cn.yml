@@ -1,0 +1,11 @@
+# 国内网络：基础镜像经 DaoCloud 转发，避免直连 registry-1.docker.io 超时。
+# 用法：docker compose -f compose.yml -f compose.cn.yml build && docker compose -f compose.yml -f compose.cn.yml up -d
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile.mcp
+      args:
+        BASE_IMAGE: docker.m.daocloud.io/library/python:3.12-slim
+  next:
+    image: docker.m.daocloud.io/library/node:20-bullseye
