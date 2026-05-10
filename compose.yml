@@ -24,7 +24,7 @@ services:
     env_file:
       - next-project/env.compose
     command: >
-      sh -lc "if [ ! -d node_modules ]; then npm ci --include=dev; fi &&
+      sh -lc "if [ ! -f node_modules/.bin/next ] || [ package-lock.json -nt node_modules ]; then npm ci --include=dev; fi &&
               if [ ! -f .next/BUILD_ID ]; then npm run build; fi &&
               exec npm run start -- --hostname 0.0.0.0 --port 3000"
     volumes:

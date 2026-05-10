@@ -36,3 +36,4 @@ python -m uvicorn main:http_app --host 127.0.0.1 --port 8000
 - **Next**：统一使用 `next-project/env.compose`（`npm run dev` 与 `compose.yml` 中 next 服务均依赖；由 `next.config.ts` 在存在时加载）。门禁邮件里若链接为本站 `/access/admin`，Next 会按 `INTERNAL_MCP_URL` 反代到 MCP。
 - **MCP**：`mcp_server/.env`（与 Next 分离）。
 - 重点：`NEXT_PUBLIC_MCP_SERVER_URL`、`INTERNAL_MCP_URL`、`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`；启用门禁时配置 `ACCESS_GATE_*`。
+- 线上激活重定向：在 `env.compose` 设 **`SITE_ORIGIN=https://www.你的域名`**（与邮件、浏览器一致；勿用 `0.0.0.0`）。

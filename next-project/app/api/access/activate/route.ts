@@ -3,10 +3,24 @@ import { SignJWT } from "jose";
 
 const COOKIE = "access_gate";
 
+/** 重定向用站点根：优先 SITE_ORIGIN（与邮件里公网一致），避免 req.url 在错误 Host（如 0.0.0.0）下拼错。 */
+function siteRoot(req: NextRequest): string {
+  const explicit = (process.env.SITE_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const xfHost = req.headers.get("x-forwarded-host");
+  const xfProto = (req.headers.get("x-forwarded-proto") || "https").split(",")[0].trim();
+  if (xfHost) {
+    const host = xfHost.split(",")[0].trim();
+    if (host) return `${xfProto}://${host}`;
+  }
+  return req.nextUrl.origin;
+}
+
 export async function GET(req: NextRequest) {
+  const root = siteRoot(req);
   const token = req.nextUrl.searchParams.get("t");
   if (!token?.trim()) {
-    return NextResponse.redirect(new URL("/access?e=missing", req.url));
+    return NextResponse.redirect(new URL("/access?e=missing", root));
   }
 
   const base = (process.env.INTERNAL_MCP_URL || "http://localhost:8000").replace(/\/+$/, "");
@@ -16,12 +30,12 @@ export async function GET(req: NextRequest) {
     body: JSON.stringify({ token: token.trim() }),
   });
   if (!r.ok) {
-    return NextResponse.redirect(new URL("/access?e=invalid", req.url));
+    return NextResponse.redirect(new URL("/access?e=invalid", root));
   }
   const body = (await r.json()) as { email?: string };
   const email = body.email;
   if (!email) {
-    return NextResponse.redirect(new URL("/access?e=invalid", req.url));
+    return NextResponse.redirect(new URL("/access?e=invalid", root));
   }
 
   const secret = process.env.ACCESS_GATE_JWT_SECRET;
@@ -35,7 +49,7 @@ export async function GET(req: NextRequest) {
     .setExpirationTime("30d")
     .sign(new TextEncoder().encode(secret));
 
-  const res = NextResponse.redirect(new URL("/", req.url));
+  const res = NextResponse.redirect(new URL("/", root));
   const isProd = process.env.NODE_ENV === "production";
   res.cookies.set(COOKIE, jwt, {
     httpOnly: true,
