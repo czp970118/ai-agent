@@ -50,10 +50,9 @@ wheels/
 # Virtual environments
 .venv
 
-# Local env secrets
+# Local env secrets（Next 统一用 env.compose，勿提交）
 .env
 .env.local
-# compose.yml next 服务注入（从 env.compose.example 复制）
 /env.compose
 
 # Playwright storage state (do not commit)

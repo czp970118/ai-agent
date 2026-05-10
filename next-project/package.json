@@ -12,6 +12,7 @@
     "@heroui/react": "^3.0.3",
     "heroui-cli": "^1.2.3",
     "isomorphic-dompurify": "^3.9.0",
+    "jose": "^5.10.0",
     "marked": "^18.0.2",
     "next": "15.3.4",
     "react": "^19.0.0",

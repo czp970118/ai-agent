@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from server.access import gate_store
+from server.access.routes import access_router
 from server.chat import chat_router
 from server.search import search_router
 from server.xhs.xhs_scheduler import xhs_scheduler_service
@@ -41,10 +43,12 @@ http_app.add_middleware(
 )
 http_app.include_router(chat_router)
 http_app.include_router(search_router)
+http_app.include_router(access_router)
 
 
 @http_app.on_event("startup")
 async def _on_startup() -> None:
+    gate_store.init_db()
     xhs_scheduler_service.start()
 
 

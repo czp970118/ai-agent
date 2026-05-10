@@ -40,7 +40,5 @@ python -m uvicorn main:http_app --host 127.0.0.1 --port 8000
 
 ## 环境变量
 
-参考 `mcp_server/.env.example`，常用变量包括：
-
-- `DEEPSEEK_API_KEY`
-- `DEEPSEEK_MODEL`
+- **MCP**：`mcp_server/.env`（勿提交 git），常用：`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`。
+- **Next**：`next-project/env.compose`（勿提交；本地 `npm run dev` 与 Docker 中 next 服务共用）。

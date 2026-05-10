@@ -9,7 +9,6 @@
 ```text
 mcp_server/
 ├─ main.py                         # 装配层：创建 FastAPI、挂载路由、启动服务
-├─ .env.example                    # 环境变量示例
 ├─ AGENT_PROMPT/
 │  └─ xiaohongshu-content-publish.SKILL.md
 ├─ server/
@@ -61,7 +60,7 @@ mcp_server/
 
 ## 环境变量
 
-参考 `.env.example`，核心项如下：
+在仓库根 `mcp_server/.env` 中配置（勿提交 git），核心项如下：
 
 - `DEEPSEEK_API_KEY`：必填，`/chat/stream` 依赖
 - `DEEPSEEK_MODEL`：可选，默认 `deepseek-chat`
@@ -85,7 +84,7 @@ uv run --directory mcp_server python -m uvicorn main:http_app --host 127.0.0.1 -
 ## 快速自检
 
 ```bash
-curl -N -X POST "http://127.0.0.1:8000/chat/stream" \
+curl -N -X POST "http://localhost:8000/chat/stream" \
   -H "Content-Type: application/json" \
   -d '{"agent":"cases","messages":[{"role":"user","content":"你好"}]}'
 ```

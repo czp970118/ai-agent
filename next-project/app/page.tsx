@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col p-8 sm:p-12 font-[family-name:var(--font-geist-sans)]">
+    <div className="min-h-screen flex flex-col p-8 sm:p-12">
       <header className="w-full text-center mb-6">
         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
           欢迎使用
