@@ -105,7 +105,29 @@ async def post_apply(body: ApplyBody) -> JSONResponse:
 
     st = gate_store.get_status(email)
     if st == "approved":
-        return JSONResponse({"ok": True, "message": "该邮箱已通过审核，请使用邮件中的激活链接或重新申请激活邮件。"})
+        act = secrets.token_urlsafe(32)
+        gate_store.add_activation_token(act, email, ttl_seconds=48 * 3600)
+        origin = _public_origin()
+        activate_url = f"{origin}/api/access/activate?t={quote(act, safe='')}"
+        try:
+            send_mail_to(
+                [email],
+                "[访问申请] 新设备 — 激活链接",
+                (
+                    "你的邮箱已通过访问审核。若要在新浏览器或新设备上使用站点，请点击下方链接完成激活"
+                    "（链结 48 小时内有效，每条仅可使用一次）：\n\n"
+                    f"{activate_url}\n"
+                ),
+            )
+        except Exception as exc:
+            logger.exception("access_resend_activation_failed email=%s", email)
+            raise HTTPException(status_code=500, detail=f"发送邮件失败: {exc}") from exc
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": "已向你的邮箱发送新的激活链接，请在需要访问的那台设备浏览器中打开。",
+            }
+        )
     if st == "denied":
         raise HTTPException(status_code=403, detail="该邮箱已被拒绝访问")
     if st == "pending":

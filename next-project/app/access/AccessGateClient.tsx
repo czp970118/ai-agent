@@ -80,7 +80,8 @@ export default function AccessGateClient() {
         </h1>
         <p className="mt-4 text-sm leading-relaxed text-slate-400">
           提交邮箱后，管理员会收到邮件。通过审批后，你会收到<strong className="text-slate-200">激活链接</strong>
-          ，在同一浏览器中打开一次即可进入站点（Cookie 约 30 天有效）。
+          ，在<strong className="text-slate-200">当前浏览器</strong>中打开一次即可进入站点（Cookie 约 30 天有效）。
+          若已通过审核，仍可在下方用<strong className="text-slate-200">同一邮箱</strong>再发一封激活邮件，用于手机、另一台电脑等新设备。
         </p>
 
         {(errHint || errLocal) && (
@@ -120,12 +121,12 @@ export default function AccessGateClient() {
             disabled={loading}
             className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "提交中…" : "发送申请"}
+            {loading ? "提交中…" : "发送申请 / 收取激活邮件"}
           </button>
         </form>
 
         <p className="mt-10 text-center text-xs text-slate-600">
-          若已收到通过邮件，请直接点击邮件中的<strong className="text-slate-400">激活链接</strong>。
+          首次通过审批后，邮件里会有一条激活链接；换设备时在上方再提交一次同一邮箱即可收到<strong className="text-slate-400">新激活链接</strong>。
         </p>
         <p className="mt-6 text-center">
           <Link href="/" className="text-xs text-slate-500 underline-offset-4 hover:text-slate-300 hover:underline">
