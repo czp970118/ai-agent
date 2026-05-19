@@ -77,7 +77,17 @@ function getMcpBaseUrl(): string {
 }
 
 export default function PromptsAdminClient() {
-  const domainOptions = ["旅游", "考公", "穿搭", "吃喝", "职场", "健身", "情感", "自定义"];
+  const domainOptions = [
+    "旅游",
+    "考公",
+    "穿搭",
+    "吃喝",
+    "职场",
+    "健身",
+    "情感",
+    "封面模版",
+    "自定义",
+  ];
   const [categoriesByAgent, setCategoriesByAgent] = useState<Record<AgentOption, CategoryRow[]>>({
     xiaohongshu: [],
     cases: [],
@@ -669,13 +679,23 @@ export default function PromptsAdminClient() {
                 </label>
               ) : null}
 
+              {createDomain === "封面模版" ? (
+                <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+                  封面模版正文可为 JSON（style / layout / palette / prompt_template）或纯 Markdown
+                  prompt；支持占位符 {"{topic}"}、{"{title_main}"}、{"{title_sub}"} 等。
+                </p>
+              ) : null}
               <label className="grid gap-1 text-sm text-slate-700 dark:text-slate-200">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">4. 输入提示词（Markdown）</span>
                 <textarea
                   className={`min-h-[280px] font-mono ${ui.textarea}`}
                   value={createBody}
                   onChange={(e) => setCreateBody(e.target.value)}
-                  placeholder={"# 角色\n你是...\n\n# 目标\n请输出...\n\n# 约束\n- ..."}
+                  placeholder={
+                    createDomain === "封面模版"
+                      ? '{\n  "style": "fresh",\n  "layout": "sparse",\n  "palette": "macaron",\n  "prompt_template": "请生成小红书竖版封面…\\n主标题：{title_main}"\n}'
+                      : "# 角色\n你是...\n\n# 目标\n请输出...\n\n# 约束\n- ..."
+                  }
                 />
               </label>
 

@@ -116,3 +116,16 @@ curl -N -X POST "http://localhost:8000/chat/stream" \
 - 会先写 prompt 到 `image-cards/{slug}/prompts/01-cover-{slug}.md`，再调用 `scripts/z-image-turbo.sh` 出图。
 - 出图结果会在 SSE 的 `end` 事件中返回 `cover_image` 字段。
 - 需要配置 `DASHSCOPE_API_KEY`。
+
+### 4) 阿里云 OSS（创作中心封面）
+
+在 `mcp_server/.env` 配置（见 `.env.example`）。封面经 `cover/upload`、`cover/overlay` 等接口写入 OSS；私有 Bucket 读图走 `GET /chat/oss/image?key=...`。
+
+### 5) 每日一题答题卡（Pillow 排版）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/chat/quiz-card/question` | 题目卡 → `quiz-question.png` |
+| POST | `/chat/quiz-card/answer` | 答案卡 → `quiz-answer.png` |
+
+创作中心 Tab「每日一题」；OSS 已配置时写入 `xhs/images/creative-covers/{workId}/`。

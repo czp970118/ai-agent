@@ -58,3 +58,7 @@ wheels/
 # Playwright storage state (do not commit)
 server/xhs/xhs_storage_state.json
 server/qcc/qcc_storage_state.json
+
+# Prisma SQLite（本地）
+/prisma/dev.db
+/prisma/dev.db-journal

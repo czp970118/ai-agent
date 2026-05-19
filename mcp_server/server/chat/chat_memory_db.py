@@ -174,6 +174,41 @@ def init_chat_memory_db(conn: sqlite3.Connection) -> None:
         WHERE is_default = 1
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creative_works (
+            id TEXT PRIMARY KEY NOT NULL,
+            title TEXT NOT NULL,
+            prompt TEXT NOT NULL DEFAULT '',
+            body TEXT NOT NULL DEFAULT '',
+            domain TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'draft',
+            platform TEXT NOT NULL DEFAULT 'xhs',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_creative_works_updated
+        ON creative_works(updated_at DESC)
+        """
+    )
+    cw_columns = {
+        str(row[1])
+        for row in conn.execute("PRAGMA table_info(creative_works)").fetchall()
+    }
+    for col_name, col_def in (
+        ("cover_path", "TEXT NOT NULL DEFAULT ''"),
+        ("cover_source", "TEXT NOT NULL DEFAULT ''"),
+        ("cover_template_id", "TEXT NOT NULL DEFAULT ''"),
+        ("cover_ref_urls", "TEXT NOT NULL DEFAULT '[]'"),
+        ("cover_title_main", "TEXT NOT NULL DEFAULT ''"),
+        ("cover_title_sub", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        if col_name not in cw_columns:
+            conn.execute(f"ALTER TABLE creative_works ADD COLUMN {col_name} {col_def}")
 
 
 def get_chat_memory_connection() -> sqlite3.Connection:

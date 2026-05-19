@@ -6,9 +6,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 import httpx
-from fastapi import APIRouter
-from fastapi import HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field 
 
 from ..constants import (
@@ -18,7 +17,12 @@ from ..constants import (
     load_xiaohongshu_publish_prompt,
     SENTENCE_ANALYSIS_PROMPT,
 )
-from ..xhs.xhs_cover_image import generate_xhs_cover_image
+from ..xhs.baoyu_image_cards import generate_baoyu_cover, get_catalog as get_baoyu_image_cards_catalog
+from ..xhs.baoyu_image_cards.extend_config import load_extend_config
+from ..xhs.cover_template import COVER_TEMPLATE_DOMAIN, parse_cover_template_body, render_cover_prompt
+from ..xhs.cover_overlay import overlay_cover_to_file
+from ..xhs.quiz_card import parse_options_text, save_quiz_answer_card, save_quiz_question_card
+from ..xhs.xhs_cover_image import generate_xhs_cover_image, topic_slug
 from ..xhs.xhs_search import search_xhs_keyword_and_poll_details as search_impl
 from .memory_store import (
     append_messages,
@@ -26,12 +30,22 @@ from .memory_store import (
     list_conversations,
     resolve_conversation,
 )
+from .creative_works_store import (
+    create_creative_work,
+    delete_creative_work,
+    get_creative_work,
+    list_creative_works,
+    patch_creative_work,
+)
+from ..storage.cover_storage import promote_local_file_to_cover_storage, save_work_cover_bytes
+from ..storage.oss_client import get_oss_object, is_oss_configured
 from .prompt_library_store import (
     create_category,
     create_style,
     delete_category,
     delete_style,
     fetch_style_body,
+    get_prompt_template_domain,
     list_prompt_library,
     update_category,
     update_style,
@@ -97,6 +111,77 @@ class PromptStylePatch(BaseModel):
     body: str | None = None
     is_default: bool | None = None
     sort_order: int | None = None
+
+
+class CreativeWorkCreate(BaseModel):
+    id: str | None = None
+    title: str | None = None
+    prompt: str | None = None
+    body: str | None = None
+    domain: str | None = None
+    status: str | None = None
+    platform: str | None = None
+    coverPath: str | None = None
+    coverSource: str | None = None
+    coverTemplateId: str | None = None
+    coverRefUrls: list[str] | None = None
+    coverTitleMain: str | None = None
+    coverTitleSub: str | None = None
+
+
+class CreativeWorkPatch(BaseModel):
+    title: str | None = None
+    prompt: str | None = None
+    body: str | None = None
+    domain: str | None = None
+    status: str | None = None
+    platform: str | None = None
+    coverPath: str | None = None
+    coverSource: str | None = None
+    coverTemplateId: str | None = None
+    coverRefUrls: list[str] | None = None
+    coverTitleMain: str | None = None
+    coverTitleSub: str | None = None
+
+
+class CoverGenerateRequest(BaseModel):
+    work_id: str | None = None
+    template_style_id: str | None = None
+    topic: str = ""
+    content: str = ""
+    title_main: str = ""
+    title_sub: str = ""
+    reference_image_urls: list[str] = Field(default_factory=list)
+    preset: str | None = None
+    style: str | None = None
+    layout: str | None = None
+    palette: str | None = None
+
+
+class CoverOverlayRequest(BaseModel):
+    work_id: str
+    title_main: str = ""
+    title_sub: str = ""
+    base_image_path: str | None = None
+    base_image_url: str | None = None
+
+
+class QuizQuestionRequest(BaseModel):
+    work_id: str
+    header: str = "公基常识"
+    question: str = ""
+    options: list[str] = Field(default_factory=list)
+    options_text: str = ""
+
+
+class QuizAnswerRequest(BaseModel):
+    work_id: str
+    header: str = "正确答案"
+    answer: str = ""
+    explanation: str = ""
+    extra_title: str = "古代知识拓展："
+    extra_lines: list[str] = Field(default_factory=list)
+    extra_text: str = ""
 
 
 def _sse(event: str, data: Any) -> bytes:
@@ -392,8 +477,8 @@ def _extract_xhs_references_and_meta(
     }
 
 
-@chat_router.get("/generated-image")
-async def get_generated_image(path: str = Query(..., min_length=1)) -> FileResponse:
+@chat_router.get("/generated-image", response_model=None)
+async def get_generated_image(path: str = Query(..., min_length=1)):
     raw = str(path or "").strip()
     if not raw:
         raise HTTPException(status_code=400, detail="path is required")
@@ -410,6 +495,37 @@ async def get_generated_image(path: str = Query(..., min_length=1)) -> FileRespo
         raise HTTPException(status_code=403, detail="path not allowed")
 
     return FileResponse(target_resolved)
+
+
+def _guess_image_content_type(filename: str, fallback: str = "") -> str:
+    ext = Path(str(filename or "")).suffix.lower()
+    if ext in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    if ext == ".png":
+        return "image/png"
+    if ext == ".webp":
+        return "image/webp"
+    if ext == ".gif":
+        return "image/gif"
+    if ext == ".bmp":
+        return "image/bmp"
+    return fallback or "application/octet-stream"
+
+
+@chat_router.get("/oss/image", response_model=None)
+async def get_oss_image(key: str = Query(..., min_length=1)):
+    if not is_oss_configured():
+        raise HTTPException(status_code=503, detail="OSS 未配置")
+    try:
+        body, ctype = get_oss_object(key)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="image not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("OSS 读取失败")
+        raise HTTPException(status_code=500, detail=f"OSS 读取失败: {exc}") from exc
+    return Response(content=body, media_type=ctype)
 
 
 @chat_router.post("/stream")
@@ -805,4 +921,258 @@ async def delete_prompt_library_style(
         delete_style(user_id="__global__", style_id=style_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@chat_router.get("/creative-works")
+async def get_creative_works_list() -> list[dict[str, Any]]:
+    return list_creative_works()
+
+
+def _fetch_cover_template_style(style_id: str) -> tuple[str, dict[str, str]]:
+    sid = str(style_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="template_style_id 必填")
+    domain = get_prompt_template_domain(agent="xiaohongshu", style_id=sid)
+    if domain != COVER_TEMPLATE_DOMAIN:
+        raise HTTPException(status_code=404, detail="封面模版不存在")
+    body = fetch_style_body(user_id="__global__", agent="xiaohongshu", style_id=sid)
+    if not body:
+        raise HTTPException(status_code=404, detail="封面模版不存在")
+    return body, parse_cover_template_body(body)
+
+
+@chat_router.get("/image-cards/catalog")
+async def get_image_cards_catalog() -> dict[str, Any]:
+    ext = load_extend_config()
+    return get_baoyu_image_cards_catalog(
+        extend_summary={
+            "style": ext.get("style"),
+            "layout": ext.get("layout"),
+            "palette": ext.get("palette"),
+            "extendPath": ext.get("source_path"),
+        }
+    )
+
+
+@chat_router.post("/cover/generate")
+async def post_cover_generate(body: CoverGenerateRequest) -> dict[str, Any]:
+    topic = str(body.topic or "").strip() or "小红书封面"
+    title_main = str(body.title_main or "").strip() or topic[:24]
+    title_sub = str(body.title_sub or "").strip()
+    refs = [str(u).strip() for u in (body.reference_image_urls or []) if str(u).strip()]
+    extra_prompt = ""
+    template_id = str(body.template_style_id or "").strip()
+    if template_id:
+        tpl_body, template = _fetch_cover_template_style(template_id)
+        extra_prompt = render_cover_prompt(
+            template=template,
+            topic=topic,
+            title_main=title_main,
+            title_sub=title_sub,
+            reference_image_urls=[],
+        )
+        if not any([body.preset, body.style, body.layout]):
+            body = body.model_copy(
+                update={
+                    "style": template.get("style") or body.style,
+                    "layout": template.get("layout") or body.layout,
+                    "palette": template.get("palette") or body.palette,
+                }
+            )
+        _ = tpl_body
+    preset = str(body.preset or "").strip() or None
+    if not preset and not body.style and not template_id:
+        preset = "clean-quote"
+    result = generate_baoyu_cover(
+        topic=topic,
+        content=str(body.content or ""),
+        title_main=title_main,
+        title_sub=title_sub,
+        work_id=str(body.work_id or "").strip() or None,
+        preset=preset,
+        style=str(body.style or "").strip() or None,
+        layout=str(body.layout or "").strip() or None,
+        palette=str(body.palette or "").strip() or None,
+        reference_image_urls=refs,
+        extra_prompt=extra_prompt,
+    )
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=500,
+            detail=str(result.get("error") or result.get("reason") or "封面生成失败"),
+        )
+    img_raw = str(result.get("image_path") or "").strip()
+    if img_raw:
+        img_path = Path(img_raw)
+        if img_path.is_file():
+            baoyu = result.get("baoyu") if isinstance(result.get("baoyu"), dict) else {}
+            slug = str(baoyu.get("slug") or img_path.parent.name).strip()
+            result = {
+                **result,
+                "image_path": promote_local_file_to_cover_storage(
+                    img_path,
+                    oss_relative=f"creative/{slug}/{img_path.name}",
+                ),
+            }
+    return result
+
+
+@chat_router.post("/quiz-card/question")
+async def post_quiz_card_question(body: QuizQuestionRequest) -> dict[str, Any]:
+    opts = [str(x).strip() for x in (body.options or []) if str(x).strip()]
+    if not opts and str(body.options_text or "").strip():
+        opts = parse_options_text(body.options_text)
+    result = save_quiz_question_card(
+        work_id=str(body.work_id or "").strip(),
+        header=str(body.header or "").strip(),
+        question=str(body.question or "").strip(),
+        options=opts,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=str(result.get("error") or "题目卡生成失败"))
+    return result
+
+
+@chat_router.post("/quiz-card/answer")
+async def post_quiz_card_answer(body: QuizAnswerRequest) -> dict[str, Any]:
+    extras = [str(x).strip() for x in (body.extra_lines or []) if str(x).strip()]
+    if not extras and str(body.extra_text or "").strip():
+        extras = [ln.strip() for ln in str(body.extra_text).splitlines() if ln.strip()]
+    result = save_quiz_answer_card(
+        work_id=str(body.work_id or "").strip(),
+        header=str(body.header or "").strip(),
+        answer=str(body.answer or "").strip(),
+        explanation=str(body.explanation or "").strip(),
+        extra_title=str(body.extra_title or "").strip(),
+        extra_lines=extras,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=str(result.get("error") or "答案卡生成失败"))
+    return result
+
+
+@chat_router.post("/cover/overlay")
+async def post_cover_overlay(body: CoverOverlayRequest) -> dict[str, Any]:
+    result = await overlay_cover_to_file(
+        work_id=str(body.work_id or "").strip(),
+        title_main=str(body.title_main or "").strip(),
+        title_sub=str(body.title_sub or "").strip(),
+        base_image_path=str(body.base_image_path or "").strip() or None,
+        base_image_url=str(body.base_image_url or "").strip() or None,
+    )
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=400,
+            detail=str(result.get("error") or "叠字封面失败"),
+        )
+    return result
+
+
+@chat_router.post("/creative-works/{work_id}/cover/base/upload")
+async def post_creative_work_cover_base_upload(work_id: str, file: UploadFile = File(...)) -> dict[str, Any]:
+    wid = str(work_id or "").strip()
+    if not wid:
+        raise HTTPException(status_code=400, detail="work_id 无效")
+    raw_name = str(file.filename or "").strip()
+    ext = Path(raw_name).suffix.lower() if raw_name else ""
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
+        ctype = str(file.content_type or "").lower()
+        if "png" in ctype:
+            ext = ".png"
+        elif "jpeg" in ctype or "jpg" in ctype:
+            ext = ".jpg"
+        elif "webp" in ctype:
+            ext = ".webp"
+        elif "gif" in ctype:
+            ext = ".gif"
+        else:
+            ext = ".png"
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="文件为空")
+    ctype = str(file.content_type or "").strip() or _guess_image_content_type(f"base{ext}")
+    try:
+        stored = save_work_cover_bytes(wid, data, filename=f"base{ext}", content_type=ctype)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "base_image_path": stored}
+
+
+@chat_router.post("/creative-works/{work_id}/cover/upload")
+async def post_creative_work_cover_upload(work_id: str, file: UploadFile = File(...)) -> dict[str, Any]:
+    wid = str(work_id or "").strip()
+    if not wid:
+        raise HTTPException(status_code=400, detail="work_id 无效")
+    raw_name = str(file.filename or "").strip()
+    ext = Path(raw_name).suffix.lower() if raw_name else ""
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
+        ctype = str(file.content_type or "").lower()
+        if "png" in ctype:
+            ext = ".png"
+        elif "jpeg" in ctype or "jpg" in ctype:
+            ext = ".jpg"
+        elif "webp" in ctype:
+            ext = ".webp"
+        elif "gif" in ctype:
+            ext = ".gif"
+        else:
+            ext = ".png"
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="文件为空")
+    ctype = str(file.content_type or "").strip() or _guess_image_content_type(f"cover{ext}")
+    try:
+        stored = save_work_cover_bytes(wid, data, filename=f"cover{ext}", content_type=ctype)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "image_path": stored}
+
+
+@chat_router.post("/creative-works")
+async def post_creative_work(body: CreativeWorkCreate) -> dict[str, Any]:
+    try:
+        return create_creative_work(
+            work_id=body.id,
+            title=str(body.title) if body.title is not None else "未命名作品",
+            prompt=str(body.prompt) if body.prompt is not None else "",
+            body=str(body.body) if body.body is not None else "",
+            domain=str(body.domain) if body.domain is not None else "",
+            status=str(body.status) if body.status is not None else "draft",
+            platform=str(body.platform) if body.platform is not None else "xhs",
+            cover_path=str(body.coverPath) if body.coverPath is not None else "",
+            cover_source=str(body.coverSource) if body.coverSource is not None else "",
+            cover_template_id=str(body.coverTemplateId) if body.coverTemplateId is not None else "",
+            cover_ref_urls=body.coverRefUrls,
+            cover_title_main=str(body.coverTitleMain) if body.coverTitleMain is not None else "",
+            cover_title_sub=str(body.coverTitleSub) if body.coverTitleSub is not None else "",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@chat_router.get("/creative-works/{work_id}")
+async def get_creative_work_item(work_id: str) -> dict[str, Any]:
+    row = get_creative_work(work_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="NOT_FOUND")
+    return row
+
+
+@chat_router.patch("/creative-works/{work_id}")
+async def patch_creative_work_item(work_id: str, body: CreativeWorkPatch) -> dict[str, Any]:
+    payload = body.model_dump(exclude_unset=True)
+    try:
+        row = patch_creative_work(work_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="NOT_FOUND")
+    return row
+
+
+@chat_router.delete("/creative-works/{work_id}")
+async def delete_creative_work_item(work_id: str) -> dict[str, Any]:
+    if not delete_creative_work(work_id):
+        raise HTTPException(status_code=404, detail="NOT_FOUND")
     return {"ok": True}

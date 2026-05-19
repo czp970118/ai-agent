@@ -89,16 +89,18 @@ function domainTagClass(domain: string): string {
 }
 
 export default function XhsPostsAdminClient() {
-  const [formValues, setFormValues] = useState<{ keyword: string; tag: string; domains: string[]; sortBy: string }>({
+  const [formValues, setFormValues] = useState({
     keyword: "",
     tag: "",
-    domains: [],
+    cityName: "",
+    domains: [] as string[],
     sortBy: "",
   });
-  const [filters, setFilters] = useState<{ keyword: string; tag: string; domains: string[]; sortBy: string }>({
+  const [filters, setFilters] = useState({
     keyword: "",
     tag: "",
-    domains: [],
+    cityName: "",
+    domains: [] as string[],
     sortBy: "",
   });
   const [offset, setOffset] = useState(0);
@@ -134,6 +136,7 @@ export default function XhsPostsAdminClient() {
       params.set("offset", String(offset));
       params.set("keyword", filters.keyword.trim());
       params.set("tag", filters.tag.trim());
+      params.set("city_name", filters.cityName.trim());
       params.set("sort_by", filters.sortBy.trim());
       filters.domains.forEach((domain) => params.append("domain", domain));
       const res = await fetch(`${getMcpBaseUrl()}/search/cache/notes?${params.toString()}`);
@@ -146,7 +149,7 @@ export default function XhsPostsAdminClient() {
     } finally {
       setLoading(false);
     }
-  }, [filters.domains, filters.keyword, filters.sortBy, filters.tag, limit, offset]);
+  }, [filters.cityName, filters.domains, filters.keyword, filters.sortBy, filters.tag, limit, offset]);
 
   useEffect(() => {
     void loadNotes();
@@ -248,12 +251,13 @@ export default function XhsPostsAdminClient() {
           setFilters({
             keyword: formValues.keyword,
             tag: formValues.tag,
+            cityName: formValues.cityName,
             domains: [...formValues.domains],
             sortBy: formValues.sortBy,
           });
         }}
         onReset={() => {
-          const empty = { keyword: "", tag: "", domains: [] as string[], sortBy: "" };
+          const empty = { keyword: "", tag: "", cityName: "", domains: [] as string[], sortBy: "" };
           setFormValues(empty);
           setOffset(0);
           setFilters(empty);
@@ -318,6 +322,15 @@ export default function XhsPostsAdminClient() {
                 </div>
               ) : null}
             </div>
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">城市</span>
+            <input
+              className={`${ui.input} w-[160px]`}
+              placeholder="如：中山、深圳"
+              value={formValues.cityName}
+              onChange={(e) => setFormValues((prev) => ({ ...prev, cityName: e.target.value }))}
+            />
           </label>
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
             <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">内容或标题</span>

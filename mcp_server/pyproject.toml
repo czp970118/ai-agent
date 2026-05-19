@@ -18,4 +18,6 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "playwright>=1.49.0",
     "fastapi-cli>=0.0.24",
+    "pillow>=11.0.0",
+    "oss2>=2.19.0",
 ]

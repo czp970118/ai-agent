@@ -42,6 +42,21 @@ def _decode_category_id(category_id: str) -> tuple[str, str]:
     return aid, d
 
 
+def get_prompt_template_domain(*, agent: str, style_id: str) -> str | None:
+    aid = str(agent or "").strip()
+    sid = str(style_id or "").strip()
+    if not aid or not sid:
+        return None
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT domain FROM prompt_templates WHERE id = ? AND agent = ? LIMIT 1",
+            (sid, aid),
+        ).fetchone()
+    if row is None:
+        return None
+    return str(row["domain"] or "").strip() or None
+
+
 def fetch_style_body(*, user_id: str, agent: str, style_id: str) -> str | None:
     aid = str(agent or "").strip()
     sid = str(style_id or "").strip()

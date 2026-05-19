@@ -28,5 +28,9 @@ build/
 # Local runtime data (do not commit)
 /mcp_server/data/
 /mcp_server/json/
+/image-cards/
+
+# Project docs (keep local only; not pushed to remote)
+/docs/
 
 /test.yml

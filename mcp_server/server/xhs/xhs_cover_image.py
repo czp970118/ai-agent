@@ -10,6 +10,10 @@ EXTEND_PATH = REPO_ROOT / ".baoyu-skills" / "baoyu-image-cards" / "EXTEND.md"
 Z_IMAGE_SCRIPT = REPO_ROOT / "scripts" / "z-image-turbo.sh"
 
 
+def topic_slug(topic: str) -> str:
+    return _topic_slug(topic)
+
+
 def _topic_slug(topic: str) -> str:
     slug = topic.strip().lower()
     slug = re.sub(r"[^a-z0-9\-_\u4e00-\u9fff]+", "-", slug)
@@ -50,9 +54,12 @@ def generate_xhs_cover_image(
     topic: str,
     content: str,
     workflow: dict[str, Any] | None = None,
+    force_generate: bool = False,
+    prompt_override: str | None = None,
+    slug_override: str | None = None,
 ) -> dict[str, Any]:
     wf = workflow or {}
-    if not bool(wf.get("generate_cover_image")):
+    if not force_generate and not bool(wf.get("generate_cover_image")):
         return {"ok": False, "skipped": True, "reason": "generate_cover_image disabled"}
     if not Z_IMAGE_SCRIPT.is_file():
         return {"ok": False, "error": f"missing script: {Z_IMAGE_SCRIPT}"}
@@ -67,7 +74,7 @@ def generate_xhs_cover_image(
     title_main = str(cover_cfg.get("title_main") or topic).strip()
     title_sub = str(cover_cfg.get("title_sub") or _pick_title_sub(content, "复习路径与实操经验")).strip()
 
-    slug = str(cover_cfg.get("slug") or _topic_slug(topic))
+    slug = str(slug_override or cover_cfg.get("slug") or _topic_slug(topic))
     base_dir = REPO_ROOT / "image-cards" / slug
     prompt_dir = base_dir / "prompts"
     prompt_dir.mkdir(parents=True, exist_ok=True)
@@ -81,18 +88,21 @@ def generate_xhs_cover_image(
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         out_path.rename(base_dir / f"01-cover-{slug}-backup-{ts}.png")
 
-    prompt = (
-        "请生成一张小红书竖版封面图。\n"
-        f"- 主题：{topic}\n"
-        f"- 风格：{style}\n"
-        f"- 布局：{layout}\n"
-        f"- 配色：{palette}\n"
-        f"- 主标题：{title_main}\n"
-        f"- 副标题：{title_sub}\n"
-        "- 视觉：干净、信息明确、大留白，手机端一眼读懂。\n"
-        "- 元素：书本、打卡日历、对勾清单。\n"
-        "- 避免：人物写实脸、复杂背景、文字过多。\n"
-    )
+    if str(prompt_override or "").strip():
+        prompt = str(prompt_override).strip()
+    else:
+        prompt = (
+            "请生成一张小红书竖版封面图。\n"
+            f"- 主题：{topic}\n"
+            f"- 风格：{style}\n"
+            f"- 布局：{layout}\n"
+            f"- 配色：{palette}\n"
+            f"- 主标题：{title_main}\n"
+            f"- 副标题：{title_sub}\n"
+            "- 视觉：干净、信息明确、大留白，手机端一眼读懂。\n"
+            "- 元素：书本、打卡日历、对勾清单。\n"
+            "- 避免：人物写实脸、复杂背景、文字过多。\n"
+        )
     prompt_path.write_text(prompt, encoding="utf-8")
 
     size = str(cover_cfg.get("size") or os.getenv("DASHSCOPE_IMAGE_SIZE", "1024*1536")).strip()

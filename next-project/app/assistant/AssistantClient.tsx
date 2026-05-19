@@ -879,6 +879,7 @@ export default function AssistantClient({ agentId }: Props) {
             <Select
               aria-label="切换领域"
               variant="secondary"
+              value={selectedDomain || undefined}
               selectedKey={selectedDomain || undefined}
               onSelectionChange={(key) => setSelectedDomain(String(key))}
               className="w-full"

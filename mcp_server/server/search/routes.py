@@ -97,6 +97,7 @@ async def post_search_poll(body: SearchPollRequest) -> dict:
 async def get_cache_notes(
     keyword: str = Query("", min_length=0),
     tag: str = Query("", min_length=0),
+    city_name: str = Query("", min_length=0),
     domain: list[str] = Query(default=[]),
     sort_by: str = Query("", min_length=0),
     limit: int = Query(20, ge=1, le=100),
@@ -105,6 +106,7 @@ async def get_cache_notes(
     return db_list_cached_notes(
         keyword=keyword,
         tag=tag,
+        city_name=city_name,
         domains=domain,
         sort_by=sort_by,
         limit=limit,

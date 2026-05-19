@@ -63,8 +63,35 @@ def _query_storage_tags(keyword: str, requirements: list[str], note_count: int, 
     return tags
 
 
+def _coerce_image_src(item: Any) -> str:
+    if isinstance(item, str):
+        return item.strip()
+    if not isinstance(item, dict):
+        return ""
+    for key in ("url", "image_url", "src", "origin_url"):
+        val = item.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    info_list = item.get("info_list")
+    if isinstance(info_list, list):
+        for info in info_list:
+            if not isinstance(info, dict):
+                continue
+            if str(info.get("image_scene") or "") == "WB_DFT":
+                url = str(info.get("url") or "").strip()
+                if url:
+                    return url
+        for info in info_list:
+            if not isinstance(info, dict):
+                continue
+            url = str(info.get("url") or "").strip()
+            if url:
+                return url
+    return ""
+
+
 def _to_proxy_image_url(raw_url: Any) -> str:
-    src = str(raw_url or "").strip()
+    src = _coerce_image_src(raw_url) if not isinstance(raw_url, str) else str(raw_url or "").strip()
     if not src:
         return ""
     if src.startswith("data:") or src.startswith("blob:") or src.startswith("/"):
@@ -326,6 +353,7 @@ def db_list_cached_notes(
     *,
     keyword: str = "",
     tag: str = "",
+    city_name: str = "",
     domains: list[str] | None = None,
     sort_by: str = "",
     limit: int = 20,
@@ -333,6 +361,7 @@ def db_list_cached_notes(
 ) -> dict[str, Any]:
     q = str(keyword or "").strip()
     t = str(tag or "").strip()
+    city_q = str(city_name or "").strip()
     clean_domains: list[str] = []
     for raw in domains or []:
         value = str(raw or "").strip()
@@ -351,6 +380,9 @@ def db_list_cached_notes(
         if t:
             where_parts.append("tags_json LIKE ?")
             where_args.append(f'%"{t}"%')
+        if city_q:
+            where_parts.append("city_name LIKE ?")
+            where_args.append(f"%{city_q}%")
         if clean_domains:
             where_parts.append("(" + " OR ".join(["domains_json LIKE ?"] * len(clean_domains)) + ")")
             where_args.extend([f'%"{d}"%' for d in clean_domains])
