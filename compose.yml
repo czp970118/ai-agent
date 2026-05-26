@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
 
   next:
-    image: node:20-bullseye
+    image: node:22-bullseye
     container_name: ai_next
     depends_on:
       - mcp

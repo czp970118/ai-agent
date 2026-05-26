@@ -8,4 +8,4 @@ services:
       args:
         BASE_IMAGE: docker.m.daocloud.io/library/python:3.12-slim
   next:
-    image: docker.m.daocloud.io/library/node:20-bullseye
+    image: docker.m.daocloud.io/library/node:22-bullseye
