@@ -209,6 +209,101 @@ def init_chat_memory_db(conn: sqlite3.Connection) -> None:
     ):
         if col_name not in cw_columns:
             conn.execute(f"ALTER TABLE creative_works ADD COLUMN {col_name} {col_def}")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS question_imports (
+            id TEXT PRIMARY KEY NOT NULL,
+            filename TEXT NOT NULL DEFAULT '',
+            mime_type TEXT NOT NULL DEFAULT '',
+            file_size INTEGER NOT NULL DEFAULT 0,
+            file_sha256 TEXT NOT NULL DEFAULT '',
+            source_path TEXT NOT NULL DEFAULT '',
+            extracted_text_path TEXT NOT NULL DEFAULT '',
+            category TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'uploaded',
+            extract_error TEXT NOT NULL DEFAULT '',
+            parse_error TEXT NOT NULL DEFAULT '',
+            parse_result_json TEXT NOT NULL DEFAULT '{}',
+            question_count INTEGER NOT NULL DEFAULT 0,
+            confirmed_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            confirmed_at TEXT NOT NULL DEFAULT '',
+            discarded_at TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_question_imports_created
+        ON question_imports(created_at DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS question_import_items (
+            id TEXT PRIMARY KEY NOT NULL,
+            import_id TEXT NOT NULL,
+            row_index INTEGER NOT NULL DEFAULT 0,
+            header TEXT NOT NULL DEFAULT '',
+            stem TEXT NOT NULL DEFAULT '',
+            options_json TEXT NOT NULL DEFAULT '[]',
+            answer TEXT NOT NULL DEFAULT '',
+            explanation TEXT NOT NULL DEFAULT '',
+            extra_title TEXT NOT NULL DEFAULT '',
+            extra_text TEXT NOT NULL DEFAULT '',
+            category TEXT NOT NULL DEFAULT '',
+            question_type TEXT NOT NULL DEFAULT 'single',
+            confidence REAL,
+            selected INTEGER NOT NULL DEFAULT 1,
+            edited INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (import_id) REFERENCES question_imports(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_question_import_items_import
+        ON question_import_items(import_id, row_index ASC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS question_bank (
+            id TEXT PRIMARY KEY NOT NULL,
+            import_id TEXT NOT NULL DEFAULT '',
+            import_item_id TEXT NOT NULL DEFAULT '',
+            category TEXT NOT NULL DEFAULT '',
+            question_type TEXT NOT NULL DEFAULT 'single',
+            header TEXT NOT NULL DEFAULT '',
+            stem TEXT NOT NULL,
+            options_json TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            explanation TEXT NOT NULL DEFAULT '',
+            extra_title TEXT NOT NULL DEFAULT '',
+            extra_text TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'ready',
+            stem_hash TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            used_at TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_question_bank_status_created
+        ON question_bank(status, created_at DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_question_bank_stem_hash_ready
+        ON question_bank(stem_hash)
+        WHERE status = 'ready'
+        """
+    )
 
 
 def get_chat_memory_connection() -> sqlite3.Connection:

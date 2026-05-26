@@ -3,6 +3,7 @@ import { ReactNode } from "react";
 
 const MENUS = [
   { href: "/admin/creative-center", label: "创作中心" },
+  { href: "/admin/question-bank", label: "考公题库" },
   { href: "/admin/xiaohongshu-posts", label: "小红书帖子" },
   { href: "/admin/scheduler", label: "定时任务" },
   { href: "/admin/prompts", label: "提示词管理" },

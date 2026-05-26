@@ -1,25 +1,64 @@
-"""每日一题：黄底答题卡 / 答案卡（Pillow 排版，非 AI 生图）。"""
+"""每日一题：水墨底图答题卡 / 答案解析卡（Pillow 排版，非 AI 生图）。"""
 
 from __future__ import annotations
 
 import io
 import logging
+import os
 import re
+from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
 from ..storage.cover_storage import save_work_cover_bytes
-from .cover_overlay import TARGET_H, TARGET_W, _draw_stroked_text, _load_font
+from .cover_overlay import TARGET_H, TARGET_W, _fit_cover, _load_font
 
 logger = logging.getLogger("mcp_server.quiz_card")
 
-COLOR_BG = (255, 206, 0)
-COLOR_GREEN = (0, 153, 0)
-COLOR_BLACK = (0, 0, 0)
+COLOR_TEXT = (32, 32, 32)
+MARGIN_X = 88
+CONTENT_W = TARGET_W - MARGIN_X * 2
+OPT_CONTENT_W = CONTENT_W - 32
 
-CONTENT_W = 920
-OPTION_X = 140
+# 1080×1440 出图，按手机全屏浏览放大字号
+TITLE_Y = 168
+TITLE_SIZE = 96
+BODY_START_Y = 328
+
+Q_FONT_SIZE = 58
+Q_LINE_HEIGHT = 84
+Q_OPT_GAP = 50
+OPT_FONT_SIZE = 54
+OPT_LINE_HEIGHT = 74
+OPT_ITEM_GAP = 18
+
+ANS_FONT_SIZE = 58
+ANS_LINE_HEIGHT = 84
+ANS_EXP_GAP = 56
+EXP_FONT_SIZE = 56
+EXP_LINE_HEIGHT = 78
+EXP_LABEL_BODY_GAP = 18
+
+_BG_TEMPLATE: Image.Image | None = None
+
+
+def _quiz_bg_path() -> Path:
+    configured = os.getenv("QUIZ_CARD_BG_PATH", "").strip()
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[2] / "assets" / "quiz" / "card_bg.png"
+
+
+def _new_canvas() -> Image.Image:
+    global _BG_TEMPLATE
+    path = _quiz_bg_path()
+    if not path.is_file():
+        raise FileNotFoundError(f"答题卡背景图不存在: {path}")
+    if _BG_TEMPLATE is None:
+        with Image.open(path) as src:
+            _BG_TEMPLATE = _fit_cover(src, TARGET_W, TARGET_H)
+    return _BG_TEMPLATE.copy()
 
 
 def _wrap_lines(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: int) -> list[str]:
@@ -41,7 +80,35 @@ def _wrap_lines(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, m
     return lines or [""]
 
 
-def _draw_lines(
+def _wrap_option_lines(
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    max_width: int,
+    *,
+    base_x: int,
+) -> tuple[list[str], int | None]:
+    """选项换行：首行保留 A. 前缀，续行按前缀宽度缩进。"""
+    raw = str(text or "").strip()
+    if not raw:
+        return [""], None
+    m = re.match(r"^([A-Ha-h][.、．)\]]\s*)(.*)$", raw, re.DOTALL)
+    if not m:
+        return _wrap_lines(raw, font, max_width), None
+
+    prefix = m.group(1)
+    body = m.group(2).strip()
+    prefix_w = int(font.getlength(prefix))
+    body_max = max(max_width - prefix_w, max_width // 4)
+    body_lines = _wrap_lines(body, font, body_max) if body else [""]
+
+    out: list[str] = []
+    for i, line in enumerate(body_lines):
+        out.append(f"{prefix}{line}" if i == 0 else line)
+    indent_x = base_x + prefix_w if len(body_lines) > 1 else None
+    return out, indent_x
+
+
+def _draw_lines_left(
     draw: ImageDraw.ImageDraw,
     lines: list[str],
     *,
@@ -50,16 +117,22 @@ def _draw_lines(
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     fill: tuple[int, int, int],
     line_height: int,
-    anchor: str = "ma",
+    indent_x: int | None = None,
 ) -> int:
     cy = y
-    for line in lines:
+    for i, line in enumerate(lines):
         if not line:
             cy += line_height // 2
             continue
-        draw.text((x, cy), line, font=font, fill=fill, anchor=anchor)
+        lx = indent_x if i > 0 and indent_x is not None else x
+        draw.text((lx, cy), line, font=font, fill=fill, anchor="la")
         cy += line_height
     return cy
+
+
+def _draw_title(draw: ImageDraw.ImageDraw, text: str, *, y: int = TITLE_Y) -> None:
+    font = _load_font(TITLE_SIZE)
+    draw.text((TARGET_W // 2, y), text, font=font, fill=COLOR_TEXT, anchor="mm")
 
 
 def _normalize_options(raw: list[str]) -> list[str]:
@@ -71,6 +144,15 @@ def _normalize_options(raw: list[str]) -> list[str]:
     if not out:
         raise ValueError("至少提供一个选项")
     return out[:8]
+
+
+def _format_answer_line(answer: str) -> str:
+    ans = str(answer or "").strip()
+    if not ans:
+        return ""
+    if ans.startswith("正确答案"):
+        return ans.replace("正确答案:", "正确答案：")
+    return f"正确答案：{ans}"
 
 
 def render_quiz_question_image(
@@ -85,41 +167,40 @@ def render_quiz_question_image(
         raise ValueError("题目不能为空")
     opts = _normalize_options(options)
 
-    canvas = Image.new("RGB", (TARGET_W, TARGET_H), COLOR_BG)
+    canvas = _new_canvas()
     draw = ImageDraw.Draw(canvas)
 
-    title_font = _load_font(76)
-    _draw_stroked_text(
-        draw,
-        (TARGET_W // 2, 100),
-        hdr,
-        font=title_font,
-        fill=COLOR_GREEN,
-        stroke_fill=COLOR_BLACK,
-        stroke_width=5,
-        anchor="mm",
-    )
+    _draw_title(draw, hdr)
 
-    q_font = _load_font(44)
+    q_font = _load_font(Q_FONT_SIZE)
     q_lines = _wrap_lines(q, q_font, CONTENT_W)
-    y = 240
-    y = _draw_lines(
+    y = _draw_lines_left(
         draw,
         q_lines,
-        x=TARGET_W // 2,
-        y=y,
+        x=MARGIN_X,
+        y=BODY_START_Y,
         font=q_font,
-        fill=COLOR_BLACK,
-        line_height=58,
-        anchor="ma",
+        fill=COLOR_TEXT,
+        line_height=Q_LINE_HEIGHT,
     )
 
-    opt_font = _load_font(40)
-    y = max(y + 48, 520)
-    gap = max(56, (TARGET_H - y - 80) // max(len(opts), 1))
+    opt_font = _load_font(OPT_FONT_SIZE)
+    y += Q_OPT_GAP
     for opt in opts:
-        draw.text((OPTION_X, y), opt, font=opt_font, fill=COLOR_BLACK, anchor="la")
-        y += gap
+        opt_lines, indent_x = _wrap_option_lines(
+            opt, opt_font, OPT_CONTENT_W, base_x=MARGIN_X,
+        )
+        y = _draw_lines_left(
+            draw,
+            opt_lines,
+            x=MARGIN_X,
+            y=y,
+            font=opt_font,
+            fill=COLOR_TEXT,
+            line_height=OPT_LINE_HEIGHT,
+            indent_x=indent_x,
+        )
+        y += OPT_ITEM_GAP
 
     return canvas
 
@@ -132,62 +213,67 @@ def render_quiz_answer_image(
     extra_title: str = "古代知识拓展：",
     extra_lines: list[str] | None = None,
 ) -> Image.Image:
-    hdr = str(header or "").strip() or "正确答案"
     ans = str(answer or "").strip()
     if not ans:
         raise ValueError("答案不能为空")
 
+    page_title = str(header or "").strip() or "答案解析"
+    if page_title in ("正确答案", "正确"):
+        page_title = "答案解析"
+
     extras = [str(x).strip() for x in (extra_lines or []) if str(x).strip()]
 
-    canvas = Image.new("RGB", (TARGET_W, TARGET_H), COLOR_BG)
+    canvas = _new_canvas()
     draw = ImageDraw.Draw(canvas)
 
-    title_font = _load_font(76)
-    _draw_stroked_text(
+    _draw_title(draw, page_title)
+
+    ans_font = _load_font(ANS_FONT_SIZE)
+    ans_line = _format_answer_line(ans)
+    y = BODY_START_Y
+    ans_lines = _wrap_lines(ans_line, ans_font, CONTENT_W)
+    y = _draw_lines_left(
         draw,
-        (TARGET_W // 2, 100),
-        hdr,
-        font=title_font,
-        fill=COLOR_GREEN,
-        stroke_fill=COLOR_BLACK,
-        stroke_width=5,
-        anchor="mm",
+        ans_lines,
+        x=MARGIN_X,
+        y=y,
+        font=ans_font,
+        fill=COLOR_TEXT,
+        line_height=ANS_LINE_HEIGHT,
     )
+    y += ANS_EXP_GAP
 
-    ans_font = _load_font(52)
-    draw.text((TARGET_W // 2, 220), ans, font=ans_font, fill=COLOR_BLACK, anchor="mm")
-
-    y = 310
     exp = str(explanation or "").strip()
     if exp:
-        exp_font = _load_font(36)
-        exp_lines = _wrap_lines(exp, exp_font, CONTENT_W)
-        y = _draw_lines(
+        body_font = _load_font(EXP_FONT_SIZE)
+        draw.text((MARGIN_X, y), "解析：", font=body_font, fill=COLOR_TEXT, anchor="la")
+        y += EXP_FONT_SIZE + EXP_LABEL_BODY_GAP
+        exp_lines = _wrap_lines(exp, body_font, CONTENT_W)
+        y = _draw_lines_left(
             draw,
             exp_lines,
-            x=TARGET_W // 2,
+            x=MARGIN_X,
             y=y,
-            font=exp_font,
-            fill=COLOR_BLACK,
-            line_height=50,
-            anchor="ma",
+            font=body_font,
+            fill=COLOR_TEXT,
+            line_height=EXP_LINE_HEIGHT,
         )
         y += 24
 
     if extras or str(extra_title or "").strip():
         et = str(extra_title or "").strip() or "古代知识拓展："
-        et_font = _load_font(38)
-        draw.text((OPTION_X, y + 10), et, font=et_font, fill=COLOR_BLACK, anchor="la")
-        y += 56
-        item_font = _load_font(32)
-        row_h = 44
-        col_w = (TARGET_W - OPTION_X * 2) // 2
+        et_font = _load_font(46)
+        draw.text((MARGIN_X, y + 8), et, font=et_font, fill=COLOR_TEXT, anchor="la")
+        y += 60
+        item_font = _load_font(44)
+        row_h = 56
+        col_w = (TARGET_W - MARGIN_X * 2) // 2
         for i, line in enumerate(extras):
             col = i % 2
             row = i // 2
-            x = OPTION_X + col * col_w
+            x = MARGIN_X + col * col_w
             yy = y + row * row_h
-            draw.text((x, yy), line, font=item_font, fill=COLOR_BLACK, anchor="la")
+            draw.text((x, yy), line, font=item_font, fill=COLOR_TEXT, anchor="la")
 
     return canvas
 

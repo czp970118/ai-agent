@@ -62,21 +62,45 @@ export default function CreativeCenterHubClient() {
             创作中心
           </h1>
           <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
-            此处展示已保存的作品（含草稿）。点右上角「创作」进入新建页；数据与提示词库相同，由 MCP 服务写入 SQLite（环境变量{" "}
-            <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">CHAT_MEMORY_SQLITE_PATH</code>
-            ，默认 <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">mcp_server/data/chat_memory.db</code>
-            ）。前端通过{" "}
-            <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">NEXT_PUBLIC_MCP_SERVER_URL</code>
-            请求 MCP，与「提示词管理」一致。
+            此处展示已保存的作品（含草稿）。选择创作方式开始新作品；数据由 MCP 服务写入 SQLite。
           </p>
         </div>
+        <div className="flex shrink-0 flex-wrap gap-2 self-end sm:self-start">
+          <Link
+            href="/admin/creative-center/daily-quiz"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60"
+          >
+            每日一题
+          </Link>
+          <Link
+            href="/admin/creative-center/new"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          >
+            流式创作
+          </Link>
+        </div>
+      </header>
+
+      <section className="mb-8 grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/admin/creative-center/daily-quiz"
+          className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 transition-colors hover:border-amber-300 hover:bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 dark:hover:border-amber-800"
+        >
+          <p className="font-medium text-amber-950 dark:text-amber-100">每日一题</p>
+          <p className="mt-1 text-sm text-amber-900/80 dark:text-amber-200/80">
+            从题库选题或手动填写，生成题目卡 + 答案解析卡两张图。
+          </p>
+        </Link>
         <Link
           href="/admin/creative-center/new"
-          className="shrink-0 self-end rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 sm:self-start dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          className="rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-slate-600"
         >
-          创作
+          <p className="font-medium text-slate-900 dark:text-slate-100">流式创作</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            AI 生成正文，配合封面、素材与提示词模板。
+          </p>
         </Link>
-      </header>
+      </section>
 
       {loadError ? (
         <p
@@ -98,7 +122,7 @@ export default function CreativeCenterHubClient() {
 
       {works.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/20 dark:text-slate-400">
-          暂无作品。点击右上角「创作」开始第一篇。
+          暂无作品。上方选择「每日一题」或「流式创作」开始。
         </p>
       ) : (
         <section aria-labelledby="works-heading">

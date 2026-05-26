@@ -53,7 +53,7 @@ export default function CoverImageSection({
   const [quizOptionsText, setQuizOptionsText] = useState(
     "A. 夫妻\nB. 姐妹\nC. 恋人\nD. 兄弟",
   );
-  const [quizAnswerHeader, setQuizAnswerHeader] = useState("正确答案");
+  const [quizAnswerHeader, setQuizAnswerHeader] = useState("答案解析");
   const [quizAnswer, setQuizAnswer] = useState("");
   const [quizExplanation, setQuizExplanation] = useState("");
   const [quizExtraTitle, setQuizExtraTitle] = useState("古代知识拓展：");
@@ -263,7 +263,7 @@ export default function CoverImageSection({
     try {
       const path = await renderQuizAnswerCard({
         workId,
-        header: quizAnswerHeader.trim() || "正确答案",
+        header: quizAnswerHeader.trim() || "答案解析",
         answer: quizAnswer.trim(),
         explanation: quizExplanation.trim(),
         extraTitle: quizExtraTitle.trim(),

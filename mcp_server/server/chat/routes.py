@@ -39,6 +39,7 @@ from .creative_works_store import (
 )
 from ..storage.cover_storage import promote_local_file_to_cover_storage, save_work_cover_bytes
 from ..storage.oss_client import get_oss_object, is_oss_configured
+from ..questions.routes import register_question_routes
 from .prompt_library_store import (
     create_category,
     create_style,
@@ -1176,3 +1177,6 @@ async def delete_creative_work_item(work_id: str) -> dict[str, Any]:
     if not delete_creative_work(work_id):
         raise HTTPException(status_code=404, detail="NOT_FOUND")
     return {"ok": True}
+
+
+register_question_routes(chat_router)

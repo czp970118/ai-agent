@@ -1,0 +1,548 @@
+"""题库导入 API：/chat/questions/*"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any, Optional
+from uuid import uuid4
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
+
+from .bank_store import confirm_import, list_questions, recall_random_questions
+from .daily_quiz_publish import publish_daily_quiz
+from .extract import combine_volume_texts, extract_document_bytes, normalize_extension, validate_extracted_text
+from .import_config import allowed_upload_extensions, upload_config_payload
+from .import_store import (
+    batch_update_selected,
+    create_import_record,
+    delete_import_items,
+    file_sha256,
+    get_import,
+    insert_import_items,
+    list_import_items,
+    list_recent_imports,
+    patch_import_item,
+    update_import_status,
+)
+from .parse_llm import parse_questions_from_text, split_text_chunks
+from .storage import (
+    read_extracted_answer_text,
+    read_extracted_question_text,
+    read_extracted_text,
+    save_extracted_answer_text,
+    save_extracted_question_text,
+    save_extracted_text,
+    save_source_file,
+)
+
+
+def max_upload_bytes() -> int:
+    raw = os.getenv("QUESTION_IMPORT_MAX_BYTES", str(20 * 1024 * 1024)).strip()
+    try:
+        return max(1024, int(raw))
+    except ValueError:
+        return 20 * 1024 * 1024
+
+
+def text_preview_max_chars() -> int:
+    raw = os.getenv("QUESTION_IMPORT_TEXT_PREVIEW_CHARS", "80000").strip()
+    try:
+        return max(1000, int(raw))
+    except ValueError:
+        return 80000
+
+
+def _extract_stats(text: str) -> dict[str, int | bool]:
+    body = str(text or "")
+    limit = text_preview_max_chars()
+    chunks = split_text_chunks(body)
+    return {
+        "charCount": len(body),
+        "estimatedLlmCalls": len(chunks) or (1 if body else 0),
+        "extractedTextTruncated": len(body) > limit,
+    }
+
+
+def _build_extract_preview(
+    *,
+    question_text: str,
+    answer_text: str,
+    question_format: str,
+    answer_format: str,
+) -> dict[str, Any]:
+    limit = text_preview_max_chars()
+    q_body = str(question_text or "")
+    a_body = str(answer_text or "")
+    combined = combine_volume_texts(q_body, a_body)
+    stats = _extract_stats(combined)
+    return {
+        "questionText": q_body[:limit],
+        "answerText": a_body[:limit] if a_body else "",
+        "questionCharCount": len(q_body),
+        "answerCharCount": len(a_body),
+        "questionTruncated": len(q_body) > limit,
+        "answerTruncated": len(a_body) > limit if a_body else False,
+        "questionFormat": question_format,
+        "answerFormat": answer_format,
+        "charCount": stats["charCount"],
+        "estimatedLlmCalls": stats["estimatedLlmCalls"],
+        "extractedTextTruncated": stats["extractedTextTruncated"],
+        # 兼容旧字段：合并预览
+        "extractedText": combined[:limit],
+    }
+
+
+async def _load_import_text(import_id: str) -> tuple[str, str]:
+    from .import_store import _connect
+
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT extracted_text_path, category FROM question_imports WHERE id = ?",
+            (import_id,),
+        ).fetchone()
+    if not row or not str(row["extracted_text_path"] or "").strip():
+        raise HTTPException(status_code=400, detail="缺少提取文本，请重新上传")
+    try:
+        text = read_extracted_text(str(row["extracted_text_path"]))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return text, str(row["category"] or "")
+
+
+class ImportItemPatch(BaseModel):
+    header: str | None = None
+    stem: str | None = None
+    options: list[str] | None = None
+    answer: str | None = None
+    explanation: str | None = None
+    extraTitle: str | None = None
+    extraText: str | None = None
+    category: str | None = None
+    questionType: str | None = None
+    selected: bool | None = None
+
+
+class BatchSelectedPatch(BaseModel):
+    selections: dict[str, bool] = Field(default_factory=dict)
+
+
+class ConfirmImportBody(BaseModel):
+    itemIds: list[str] | None = Field(default=None, alias="item_ids")
+
+    model_config = {"populate_by_name": True}
+
+
+class RecallQuestionsBody(BaseModel):
+    count: int = 7
+    excludeIds: list[str] = Field(default_factory=list, alias="exclude_ids")
+    category: str = ""
+
+    model_config = {"populate_by_name": True}
+
+
+class DailyQuizPublishSlot(BaseModel):
+    questionId: str = Field(alias="question_id")
+    stem: str = ""
+    questionPath: str = Field(alias="question_path")
+    answerPath: str = Field(alias="answer_path")
+
+    model_config = {"populate_by_name": True}
+
+
+class DailyQuizPublishBody(BaseModel):
+    workId: str = Field(alias="work_id")
+    title: str | None = None
+    category: str = ""
+    slots: list[DailyQuizPublishSlot] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+async def _run_parse_pipeline(import_id: str, text: str, category: str) -> dict[str, Any]:
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        update_import_status(
+            import_id,
+            status="parse_failed",
+            parse_error="缺少环境变量 DEEPSEEK_API_KEY",
+        )
+        raise HTTPException(status_code=500, detail="缺少环境变量 DEEPSEEK_API_KEY")
+
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    update_import_status(import_id, status="parsing")
+
+    result = await parse_questions_from_text(
+        text,
+        default_category=category,
+        api_key=api_key,
+        model=model,
+    )
+
+    parse_payload = {
+        "warnings": result.get("warnings") or [],
+        "raw_blocks": result.get("raw_blocks") or [],
+        "error": result.get("error") or "",
+    }
+    parse_json = json.dumps(parse_payload, ensure_ascii=False)
+
+    if not result.get("ok"):
+        err = str(result.get("error") or "解析失败")
+        update_import_status(
+            import_id,
+            status="parse_failed",
+            parse_error=err,
+            parse_result_json=parse_json,
+            question_count=0,
+        )
+        imp = get_import(import_id)
+        return {
+            "ok": False,
+            "import": imp,
+            "items": [],
+            "warnings": parse_payload["warnings"],
+            "error": err,
+        }
+
+    questions = result.get("questions") or []
+    items = insert_import_items(import_id, questions)
+    update_import_status(
+        import_id,
+        status="parsed",
+        parse_error="",
+        parse_result_json=parse_json,
+        question_count=len(items),
+    )
+    imp = get_import(import_id)
+    return {
+        "ok": True,
+        "import": imp,
+        "items": items,
+        "warnings": parse_payload["warnings"],
+    }
+
+
+def register_question_routes(router: APIRouter) -> None:
+    @router.get("/questions/import/config")
+    async def get_questions_import_config() -> dict[str, Any]:
+        return {"ok": True, **upload_config_payload(max_upload_bytes=max_upload_bytes())}
+
+    @router.get("/questions/import")
+    async def get_questions_import_list(limit: int = 20) -> dict[str, Any]:
+        return {"ok": True, "imports": list_recent_imports(limit=limit)}
+
+    async def _validate_upload_file(upload: UploadFile) -> tuple[bytes, str, str]:
+        raw_name = str(upload.filename or "").strip()
+        ext = normalize_extension(raw_name)
+        allowed = allowed_upload_extensions()
+        if ext not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail="仅支持 " + "、".join(sorted(allowed)) + " 文件",
+            )
+        data = await upload.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="文件为空")
+        if len(data) > max_upload_bytes():
+            raise HTTPException(status_code=400, detail=f"文件超过 {max_upload_bytes()} 字节上限")
+        return data, ext, raw_name or f"source{ext}"
+
+    @router.post("/questions/import/upload")
+    async def post_questions_import_upload(
+        file: Optional[UploadFile] = File(None),
+        answer_file: Optional[UploadFile] = File(None),
+        category: str = Form(""),
+    ) -> dict[str, Any]:
+        has_question = bool(file and str(file.filename or "").strip())
+        has_answer = bool(answer_file and str(answer_file.filename or "").strip())
+        if not has_question and not has_answer:
+            raise HTTPException(status_code=400, detail="请至少上传题目卷或答案/解析卷之一")
+
+        import_id = str(uuid4())
+        cat = str(category or "").strip()
+
+        q_data = b""
+        q_ext = ""
+        q_name = ""
+        a_data = b""
+        a_ext = ""
+        a_name = ""
+        a_fmt = ""
+        display_name = ""
+        total_size = 0
+        sha_payload = b""
+        source_path = ""
+
+        if has_question:
+            q_data, q_ext, q_name = await _validate_upload_file(file)  # type: ignore[arg-type]
+            try:
+                source_path = save_source_file(import_id, q_data, q_ext, role="question")
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            display_name = q_name
+            total_size = len(q_data)
+            sha_payload = q_data
+
+        if has_answer:
+            a_data, a_ext, a_name = await _validate_upload_file(answer_file)  # type: ignore[arg-type]
+            try:
+                answer_source = save_source_file(import_id, a_data, a_ext, role="answer")
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            a_fmt = a_ext
+            if not has_question:
+                source_path = answer_source
+                display_name = f"解析:{a_name}"
+                total_size = len(a_data)
+                sha_payload = a_data
+            else:
+                display_name = f"{q_name} | 解析:{a_name}"
+                total_size += len(a_data)
+                sha_payload += a_data
+
+        primary_upload = file if has_question else answer_file
+        primary_mime = str(primary_upload.content_type or "")  # type: ignore[union-attr]
+        file_hash = file_sha256(sha_payload)
+        create_import_record(
+            filename=display_name,
+            mime_type=primary_mime,
+            file_size=total_size,
+            file_sha256=file_hash,
+            source_path=source_path,
+            category=cat,
+            import_id=import_id,
+        )
+
+        answer_volume = has_answer
+        q_text = ""
+        a_text = ""
+
+        update_import_status(import_id, status="extracting")
+        try:
+            if has_question:
+                q_text = extract_document_bytes(q_data, ext=q_ext)
+
+            if has_answer:
+                a_text = extract_document_bytes(a_data, ext=a_ext)
+                if not str(a_text or "").strip():
+                    raise ValueError("答案/解析卷未能提取到文字")
+
+            text = combine_volume_texts(q_text, a_text)
+            validate_ext = q_ext or a_fmt or ".docx"
+            validate_extracted_text(text, ext=validate_ext)
+            save_extracted_question_text(import_id, q_text)
+            save_extracted_answer_text(import_id, a_text)
+            extracted_path = save_extracted_text(import_id, text)
+            update_import_status(
+                import_id,
+                extracted_text_path=extracted_path,
+                extract_error="",
+            )
+        except ValueError as exc:
+            update_import_status(
+                import_id,
+                status="extract_failed",
+                extract_error=str(exc),
+            )
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        update_import_status(
+            import_id,
+            status="text_extracted",
+            filename=display_name,
+            file_size=total_size,
+            file_sha256=file_hash,
+        )
+
+        imp = get_import(import_id)
+        preview = _build_extract_preview(
+            question_text=q_text,
+            answer_text=a_text,
+            question_format=q_ext,
+            answer_format=a_fmt,
+        )
+        return {
+            "ok": True,
+            "import": imp,
+            "hasAnswerVolume": answer_volume,
+            **preview,
+            "items": [],
+            "warnings": [],
+        }
+
+    @router.get("/questions/import/{import_id}/extracted-text")
+    async def get_questions_import_extracted_text(import_id: str) -> dict[str, Any]:
+        try:
+            get_import(import_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        import_id = str(import_id or "").strip()
+        q_text = read_extracted_question_text(import_id)
+        a_text = read_extracted_answer_text(import_id)
+        from .import_store import _connect
+        from .storage import import_dir as _import_dir
+
+        q_fmt = ".docx"
+        a_fmt = ""
+        with _connect() as conn:
+            row = conn.execute(
+                "SELECT source_path FROM question_imports WHERE id = ?",
+                (import_id,),
+            ).fetchone()
+        if row and str(row["source_path"] or "").strip():
+            q_fmt = Path(str(row["source_path"])).suffix.lower() or ".docx"
+        vol_dir = _import_dir(import_id)
+        answer_path = vol_dir / "source-answer.docx"
+        if answer_path.is_file():
+            a_fmt = ".docx"
+        preview = _build_extract_preview(
+            question_text=q_text,
+            answer_text=a_text,
+            question_format=q_fmt or ".docx",
+            answer_format=a_fmt,
+        )
+        return {"ok": True, **preview}
+
+    @router.post("/questions/import/{import_id}/parse")
+    async def post_questions_import_parse(import_id: str) -> dict[str, Any]:
+        imp = get_import(import_id)
+        if imp["status"] not in ("text_extracted", "parse_failed", "parsed"):
+            raise HTTPException(status_code=400, detail="请先完成文字提取")
+        text, cat = await _load_import_text(import_id)
+        delete_import_items(import_id)
+        return await _run_parse_pipeline(import_id, text, cat)
+
+    @router.get("/questions/import/{import_id}")
+    async def get_questions_import(import_id: str) -> dict[str, Any]:
+        try:
+            imp = get_import(import_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"ok": True, "import": imp}
+
+    @router.get("/questions/import/{import_id}/items")
+    async def get_questions_import_items(import_id: str) -> dict[str, Any]:
+        try:
+            get_import(import_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"ok": True, "items": list_import_items(import_id)}
+
+    @router.patch("/questions/import/{import_id}/items/{item_id}")
+    async def patch_questions_import_item(
+        import_id: str,
+        item_id: str,
+        body: ImportItemPatch,
+    ) -> dict[str, Any]:
+        imp = get_import(import_id)
+        if imp["status"] not in ("parsed", "parse_failed"):
+            raise HTTPException(status_code=400, detail="当前批次不可编辑预览项")
+        patch = body.model_dump(exclude_unset=True)
+        try:
+            item = patch_import_item(import_id, item_id, patch)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, "item": item}
+
+    @router.patch("/questions/import/{import_id}/items")
+    async def patch_questions_import_items_batch(
+        import_id: str,
+        body: BatchSelectedPatch,
+    ) -> dict[str, Any]:
+        imp = get_import(import_id)
+        if imp["status"] not in ("parsed", "parse_failed"):
+            raise HTTPException(status_code=400, detail="当前批次不可更新勾选")
+        items = batch_update_selected(import_id, body.selections)
+        return {"ok": True, "items": items}
+
+    @router.post("/questions/import/{import_id}/confirm")
+    async def post_questions_import_confirm(
+        import_id: str,
+        body: ConfirmImportBody | None = None,
+    ) -> dict[str, Any]:
+        item_ids = body.itemIds if body else None
+        try:
+            return confirm_import(import_id, item_ids=item_ids)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/questions/import/{import_id}/reparse")
+    async def post_questions_import_reparse(import_id: str) -> dict[str, Any]:
+        """与 /parse 相同：基于已存 extracted.txt 重新跑 DeepSeek。"""
+        imp = get_import(import_id)
+        if imp["status"] not in ("text_extracted", "parse_failed", "parsed"):
+            raise HTTPException(status_code=400, detail="当前状态不可重新解析")
+        text, cat = await _load_import_text(import_id)
+        delete_import_items(import_id)
+        return await _run_parse_pipeline(import_id, text, cat)
+
+    @router.post("/questions/import/{import_id}/discard")
+    async def post_questions_import_discard(import_id: str) -> dict[str, Any]:
+        imp = get_import(import_id)
+        if imp["status"] == "confirmed":
+            raise HTTPException(status_code=400, detail="已入库批次不可放弃")
+        from ..chat.chat_memory_db import utc_now_iso
+
+        update_import_status(
+            import_id,
+            status="discarded",
+            discarded_at=utc_now_iso(),
+        )
+        delete_import_items(import_id)
+        return {"ok": True, "import": get_import(import_id)}
+
+    @router.get("/questions")
+    async def get_questions_bank(
+        status: str = "ready",
+        category: str = "",
+        usage: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        data = list_questions(
+            status=status,
+            category=category,
+            usage=usage,
+            limit=limit,
+            offset=offset,
+        )
+        return {"ok": True, **data}
+
+    @router.post("/questions/recall")
+    async def post_questions_recall(body: RecallQuestionsBody) -> dict[str, Any]:
+        data = recall_random_questions(
+            count=body.count,
+            exclude_ids=body.excludeIds,
+            category=str(body.category or "").strip(),
+        )
+        if not data.get("items"):
+            detail = "题库中没有可召回的未使用题目"
+            if body.excludeIds:
+                detail += "（可能已全部在排除列表中或均已发布过）"
+            raise HTTPException(status_code=400, detail=detail)
+        return {"ok": True, **data}
+
+    @router.post("/questions/daily-quiz/publish")
+    async def post_daily_quiz_publish(body: DailyQuizPublishBody) -> dict[str, Any]:
+        if not body.slots:
+            raise HTTPException(status_code=400, detail="slots 不能为空")
+        try:
+            slots_payload = [
+                {
+                    "questionId": s.questionId,
+                    "stem": s.stem,
+                    "questionPath": s.questionPath,
+                    "answerPath": s.answerPath,
+                }
+                for s in body.slots
+            ]
+            return publish_daily_quiz(
+                work_id=body.workId,
+                slots=slots_payload,
+                title=body.title,
+                category=str(body.category or "").strip(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc

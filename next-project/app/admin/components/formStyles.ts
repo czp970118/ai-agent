@@ -4,8 +4,14 @@ export const adminFormStyles = {
   hint: "text-xs text-slate-500 dark:text-slate-400",
   sectionTitle: "mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
   panel: "rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-950/40",
+  /** 表单行内控件统一高度（Select、文件框、按钮对齐） */
+  controlH: "h-10",
+  toolbarLabel: "block h-4 leading-4",
+  toolbarControl: "h-10 min-h-10 max-h-10",
   input:
     "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-800",
+  inputControl:
+    "flex h-10 items-center rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100",
   textarea:
     "w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-800",
   buttonPrimary:
