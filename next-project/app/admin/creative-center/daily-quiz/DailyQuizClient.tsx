@@ -18,6 +18,7 @@ import {
   emptySlotFromQuestion,
   formatAnswerDisplay,
   optionsToText,
+  quizQuestionCardHeader,
   toQuizImageDisplayUrl,
   type DailyQuizSlot,
 } from "./dailyQuizHelpers";
@@ -35,7 +36,7 @@ async function generateQuizPair(
   const workId = slotWorkId(index, q.id);
   const questionPath = await renderQuizQuestionCard({
     workId,
-    header: q.header.trim() || "公基常识",
+    header: quizQuestionCardHeader(q.header),
     question: q.stem.trim(),
     optionsText: optionsToText(q.options),
   });

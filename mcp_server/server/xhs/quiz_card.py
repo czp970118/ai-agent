@@ -130,6 +130,15 @@ def _draw_lines_left(
     return cy
 
 
+def _normalize_question_card_header(header: str) -> str:
+    hdr = str(header or "").strip()
+    if not hdr:
+        return "公基常识"
+    if hdr == "公基":
+        return "公基常识"
+    return hdr
+
+
 def _draw_title(draw: ImageDraw.ImageDraw, text: str, *, y: int = TITLE_Y) -> None:
     font = _load_font(TITLE_SIZE)
     draw.text((TARGET_W // 2, y), text, font=font, fill=COLOR_TEXT, anchor="mm")
@@ -161,7 +170,7 @@ def render_quiz_question_image(
     question: str,
     options: list[str],
 ) -> Image.Image:
-    hdr = str(header or "").strip() or "公基常识"
+    hdr = _normalize_question_card_header(header)
     q = str(question or "").strip()
     if not q:
         raise ValueError("题目不能为空")

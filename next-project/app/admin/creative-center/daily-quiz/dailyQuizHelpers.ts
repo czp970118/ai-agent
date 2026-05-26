@@ -3,6 +3,13 @@ import { toCoverDisplayUrl } from "../creativeCover";
 
 export const DAILY_QUIZ_SLOT_COUNT = 5;
 
+/** 题目卡顶栏标题：题库 header 常为「公基」，出图统一为「公基常识」 */
+export function quizQuestionCardHeader(header: string): string {
+  const h = String(header || "").trim();
+  if (!h || h === "公基") return "公基常识";
+  return h;
+}
+
 export function optionsToText(options: string[]): string {
   return options.map((o) => String(o || "").trim()).filter(Boolean).join("\n");
 }
