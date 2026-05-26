@@ -44,6 +44,7 @@ RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR
     libfreetype6 \
     ca-certificates \
     fonts-liberation \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --retries 10 --timeout 120 uv
