@@ -16,6 +16,7 @@ type ConfirmAlertDialogProps = {
   hideCancel?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
+  onCancel?: () => void;
 };
 
 const STATUS_ICON: Record<DialogStatus, { ring: string; glyph: string }> = {
@@ -53,6 +54,7 @@ export default function ConfirmAlertDialog({
   hideCancel = false,
   onOpenChange,
   onConfirm,
+  onCancel,
 }: ConfirmAlertDialogProps) {
   if (!open) return null;
 
@@ -98,7 +100,10 @@ export default function ConfirmAlertDialog({
               type="button"
               className={ui.buttonSecondary}
               disabled={busy}
-              onClick={() => onOpenChange(false)}
+              onClick={() => {
+                onCancel?.();
+                onOpenChange(false);
+              }}
             >
               {cancelLabel}
             </button>

@@ -151,6 +151,16 @@ export default function QuestionBankImportClient() {
     setItems([]);
     setWarnings([]);
     setImportTags([]);
+    setEditingId(null);
+    setEditDraft({});
+  };
+
+  const startNewImport = () => {
+    resetBatch();
+    setPasteText("");
+    setFiles([]);
+    setSuccessMessage("");
+    setError("");
   };
 
   const handleSubmitContent = useCallback(async () => {
@@ -766,14 +776,12 @@ export default function QuestionBankImportClient() {
         title="入库成功"
         message={successMessage}
         confirmLabel="返回题库列表"
+        cancelLabel="继续导入"
         status="success"
-        hideCancel
         onOpenChange={(open) => {
-          if (!open) {
-            setSuccessMessage("");
-            router.push("/admin/question-bank");
-          }
+          if (!open) setSuccessMessage("");
         }}
+        onCancel={startNewImport}
         onConfirm={() => {
           setSuccessMessage("");
           router.push("/admin/question-bank");
