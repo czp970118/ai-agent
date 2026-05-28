@@ -11,7 +11,14 @@ from uuid import uuid4
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from .bank_store import confirm_import, list_questions, recall_random_questions
+from .bank_store import (
+    confirm_import,
+    delete_questions,
+    get_question,
+    list_questions,
+    patch_question,
+    recall_random_questions,
+)
 from .daily_quiz_publish import publish_daily_quiz
 from .extract import combine_volume_texts, extract_document_bytes, normalize_extension, validate_extracted_text
 from .import_config import allowed_upload_extensions, upload_config_payload
@@ -121,6 +128,7 @@ class ImportItemPatch(BaseModel):
     extraTitle: str | None = None
     extraText: str | None = None
     category: str | None = None
+    subjectDomain: str | None = Field(default=None, alias="subject_domain")
     questionType: str | None = None
     selected: bool | None = None
 
@@ -131,6 +139,15 @@ class BatchSelectedPatch(BaseModel):
 
 class ConfirmImportBody(BaseModel):
     itemIds: list[str] | None = Field(default=None, alias="item_ids")
+    tags: list[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class PasteImportBody(BaseModel):
+    category: str = ""
+    question_text: str = ""
+    answer_text: str = ""
 
     model_config = {"populate_by_name": True}
 
@@ -139,6 +156,8 @@ class RecallQuestionsBody(BaseModel):
     count: int = 7
     excludeIds: list[str] = Field(default_factory=list, alias="exclude_ids")
     category: str = ""
+    subjectDomain: str = Field(default="", alias="subject_domain")
+    tags: list[str] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}
 
@@ -159,6 +178,25 @@ class DailyQuizPublishBody(BaseModel):
     slots: list[DailyQuizPublishSlot] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}
+
+
+class QuestionBankPatch(BaseModel):
+    header: str | None = None
+    stem: str | None = None
+    options: list[str] | None = None
+    answer: str | None = None
+    explanation: str | None = None
+    extraTitle: str | None = None
+    extraText: str | None = None
+    category: str | None = None
+    subjectDomain: str | None = Field(default=None, alias="subject_domain")
+    tags: list[str] | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class DeleteQuestionsBody(BaseModel):
+    ids: list[str] = Field(default_factory=list)
 
 
 async def _run_parse_pipeline(import_id: str, text: str, category: str) -> dict[str, Any]:
@@ -249,65 +287,24 @@ def register_question_routes(router: APIRouter) -> None:
             raise HTTPException(status_code=400, detail=f"文件超过 {max_upload_bytes()} 字节上限")
         return data, ext, raw_name or f"source{ext}"
 
-    @router.post("/questions/import/upload")
-    async def post_questions_import_upload(
-        file: Optional[UploadFile] = File(None),
-        answer_file: Optional[UploadFile] = File(None),
-        category: str = Form(""),
+    async def _create_extracted_import(
+        *,
+        import_id: str,
+        category: str,
+        display_name: str,
+        total_size: int,
+        file_hash: str,
+        source_path: str,
+        q_text: str,
+        a_text: str,
+        q_ext: str,
+        a_fmt: str,
+        answer_volume: bool,
     ) -> dict[str, Any]:
-        has_question = bool(file and str(file.filename or "").strip())
-        has_answer = bool(answer_file and str(answer_file.filename or "").strip())
-        if not has_question and not has_answer:
-            raise HTTPException(status_code=400, detail="请至少上传题目卷或答案/解析卷之一")
-
-        import_id = str(uuid4())
         cat = str(category or "").strip()
-
-        q_data = b""
-        q_ext = ""
-        q_name = ""
-        a_data = b""
-        a_ext = ""
-        a_name = ""
-        a_fmt = ""
-        display_name = ""
-        total_size = 0
-        sha_payload = b""
-        source_path = ""
-
-        if has_question:
-            q_data, q_ext, q_name = await _validate_upload_file(file)  # type: ignore[arg-type]
-            try:
-                source_path = save_source_file(import_id, q_data, q_ext, role="question")
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-            display_name = q_name
-            total_size = len(q_data)
-            sha_payload = q_data
-
-        if has_answer:
-            a_data, a_ext, a_name = await _validate_upload_file(answer_file)  # type: ignore[arg-type]
-            try:
-                answer_source = save_source_file(import_id, a_data, a_ext, role="answer")
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-            a_fmt = a_ext
-            if not has_question:
-                source_path = answer_source
-                display_name = f"解析:{a_name}"
-                total_size = len(a_data)
-                sha_payload = a_data
-            else:
-                display_name = f"{q_name} | 解析:{a_name}"
-                total_size += len(a_data)
-                sha_payload += a_data
-
-        primary_upload = file if has_question else answer_file
-        primary_mime = str(primary_upload.content_type or "")  # type: ignore[union-attr]
-        file_hash = file_sha256(sha_payload)
         create_import_record(
             filename=display_name,
-            mime_type=primary_mime,
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             file_size=total_size,
             file_sha256=file_hash,
             source_path=source_path,
@@ -315,20 +312,8 @@ def register_question_routes(router: APIRouter) -> None:
             import_id=import_id,
         )
 
-        answer_volume = has_answer
-        q_text = ""
-        a_text = ""
-
         update_import_status(import_id, status="extracting")
         try:
-            if has_question:
-                q_text = extract_document_bytes(q_data, ext=q_ext)
-
-            if has_answer:
-                a_text = extract_document_bytes(a_data, ext=a_ext)
-                if not str(a_text or "").strip():
-                    raise ValueError("答案/解析卷未能提取到文字")
-
             text = combine_volume_texts(q_text, a_text)
             validate_ext = q_ext or a_fmt or ".docx"
             validate_extracted_text(text, ext=validate_ext)
@@ -371,6 +356,106 @@ def register_question_routes(router: APIRouter) -> None:
             "items": [],
             "warnings": [],
         }
+
+    @router.post("/questions/import/upload")
+    async def post_questions_import_upload(
+        files: Optional[list[UploadFile]] = File(None),
+        file: Optional[UploadFile] = File(None),
+        answer_file: Optional[UploadFile] = File(None),
+        category: str = Form(""),
+    ) -> dict[str, Any]:
+        upload_list: list[UploadFile] = []
+        if files:
+            upload_list.extend([f for f in files if str(f.filename or "").strip()])
+        if file and str(file.filename or "").strip():
+            upload_list.append(file)
+        if answer_file and str(answer_file.filename or "").strip():
+            upload_list.append(answer_file)
+        if not upload_list:
+            raise HTTPException(status_code=400, detail="请至少上传一个 .docx 文件")
+
+        import_id = str(uuid4())
+        extracted_texts: list[str] = []
+        file_names: list[str] = []
+        total_size = 0
+        sha_payload = b""
+        q_ext = ".docx"
+        a_fmt = ""
+        source_path = ""
+
+        for idx, upload in enumerate(upload_list):
+            data, ext, name = await _validate_upload_file(upload)
+            text = extract_document_bytes(data, ext=ext)
+            extracted_texts.append(text)
+            file_names.append(name)
+            total_size += len(data)
+            sha_payload += data
+            try:
+                if idx == 0:
+                    source_path = save_source_file(import_id, data, ext, role="question")
+                    q_ext = ext
+                elif idx == 1:
+                    save_source_file(import_id, data, ext, role="answer")
+                    a_fmt = ext
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if len(extracted_texts) == 2:
+            q_text, a_text = extracted_texts[0], extracted_texts[1]
+        else:
+            q_text = "\n\n".join(extracted_texts)
+            a_text = ""
+
+        if len(file_names) == 1:
+            display_name = file_names[0]
+        elif len(file_names) == 2:
+            display_name = f"{file_names[0]} | 解析:{file_names[1]}"
+        else:
+            display_name = f"{file_names[0]} 等 {len(file_names)} 个文件"
+
+        file_hash = file_sha256(sha_payload)
+        answer_volume = bool(a_text.strip())
+        return await _create_extracted_import(
+            import_id=import_id,
+            category=category,
+            display_name=display_name,
+            total_size=total_size,
+            file_hash=file_hash,
+            source_path=source_path,
+            q_text=q_text,
+            a_text=a_text,
+            q_ext=q_ext,
+            a_fmt=a_fmt,
+            answer_volume=answer_volume,
+        )
+
+    @router.post("/questions/import/paste")
+    async def post_questions_import_paste(body: PasteImportBody) -> dict[str, Any]:
+        q_text = str(body.question_text or "").strip()
+        a_text = str(body.answer_text or "").strip()
+        if not q_text and not a_text:
+            raise HTTPException(status_code=400, detail="请至少粘贴题目或解析文案之一")
+
+        import_id = str(uuid4())
+        display_name = "粘贴导入"
+        if q_text and a_text:
+            display_name = "粘贴导入（题目+解析）"
+        elif a_text:
+            display_name = "粘贴导入（解析）"
+
+        return await _create_extracted_import(
+            import_id=import_id,
+            category=body.category,
+            display_name=display_name,
+            total_size=len(q_text) + len(a_text),
+            file_hash=file_sha256(f"{q_text}\n{a_text}".encode("utf-8")),
+            source_path="",
+            q_text=q_text,
+            a_text=a_text,
+            q_ext=".txt",
+            a_fmt=".txt" if a_text else "",
+            answer_volume=bool(a_text),
+        )
 
     @router.get("/questions/import/{import_id}/extracted-text")
     async def get_questions_import_extracted_text(import_id: str) -> dict[str, Any]:
@@ -463,8 +548,9 @@ def register_question_routes(router: APIRouter) -> None:
         body: ConfirmImportBody | None = None,
     ) -> dict[str, Any]:
         item_ids = body.itemIds if body else None
+        tags = body.tags if body else []
         try:
-            return confirm_import(import_id, item_ids=item_ids)
+            return confirm_import(import_id, item_ids=item_ids, tags=tags)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -497,18 +583,58 @@ def register_question_routes(router: APIRouter) -> None:
     async def get_questions_bank(
         status: str = "ready",
         category: str = "",
+        subject_domain: str = "",
         usage: str = "",
+        tags: str = "",
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
+        from .tags import normalize_tags
+
+        tag_list = normalize_tags([t.strip() for t in str(tags or "").split(",") if t.strip()])
         data = list_questions(
             status=status,
             category=category,
+            subject_domain=str(subject_domain or "").strip(),
             usage=usage,
+            tags=tag_list or None,
             limit=limit,
             offset=offset,
         )
         return {"ok": True, **data}
+
+    @router.get("/questions/{question_id}")
+    async def get_questions_bank_item(question_id: str) -> dict[str, Any]:
+        try:
+            item = get_question(question_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"ok": True, "item": item}
+
+    @router.patch("/questions/{question_id}")
+    async def patch_questions_bank_item(
+        question_id: str,
+        body: QuestionBankPatch,
+    ) -> dict[str, Any]:
+        patch = body.model_dump(exclude_unset=True)
+        try:
+            item = patch_question(question_id, patch)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, "item": item}
+
+    @router.delete("/questions/{question_id}")
+    async def delete_questions_bank_item(question_id: str) -> dict[str, Any]:
+        result = delete_questions([question_id])
+        if result["deleted"] == 0:
+            raise HTTPException(status_code=404, detail="题目不存在")
+        return {"ok": True, **result}
+
+    @router.post("/questions/delete-batch")
+    async def post_questions_delete_batch(body: DeleteQuestionsBody) -> dict[str, Any]:
+        if not body.ids:
+            raise HTTPException(status_code=400, detail="请选择要删除的题目")
+        return {"ok": True, **delete_questions(body.ids)}
 
     @router.post("/questions/recall")
     async def post_questions_recall(body: RecallQuestionsBody) -> dict[str, Any]:
@@ -516,6 +642,8 @@ def register_question_routes(router: APIRouter) -> None:
             count=body.count,
             exclude_ids=body.excludeIds,
             category=str(body.category or "").strip(),
+            subject_domain=str(body.subjectDomain or "").strip(),
+            tags=body.tags,
         )
         if not data.get("items"):
             detail = "题库中没有可召回的未使用题目"

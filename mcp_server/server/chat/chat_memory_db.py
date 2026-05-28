@@ -253,6 +253,7 @@ def init_chat_memory_db(conn: sqlite3.Connection) -> None:
             extra_text TEXT NOT NULL DEFAULT '',
             category TEXT NOT NULL DEFAULT '',
             question_type TEXT NOT NULL DEFAULT 'single',
+            subject_domain TEXT NOT NULL DEFAULT '',
             confidence REAL,
             selected INTEGER NOT NULL DEFAULT 1,
             edited INTEGER NOT NULL DEFAULT 0,
@@ -282,6 +283,8 @@ def init_chat_memory_db(conn: sqlite3.Connection) -> None:
             explanation TEXT NOT NULL DEFAULT '',
             extra_title TEXT NOT NULL DEFAULT '',
             extra_text TEXT NOT NULL DEFAULT '',
+            tags_json TEXT NOT NULL DEFAULT '[]',
+            subject_domain TEXT NOT NULL DEFAULT '',
             status TEXT NOT NULL DEFAULT 'ready',
             stem_hash TEXT NOT NULL DEFAULT '',
             sort_order INTEGER NOT NULL DEFAULT 0,
@@ -304,6 +307,22 @@ def init_chat_memory_db(conn: sqlite3.Connection) -> None:
         WHERE status = 'ready'
         """
     )
+    qb_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(question_bank)").fetchall()}
+    if "tags_json" not in qb_columns:
+        conn.execute(
+            "ALTER TABLE question_bank ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "subject_domain" not in qb_columns:
+        conn.execute(
+            "ALTER TABLE question_bank ADD COLUMN subject_domain TEXT NOT NULL DEFAULT ''"
+        )
+    qi_columns = {
+        str(row[1]) for row in conn.execute("PRAGMA table_info(question_import_items)").fetchall()
+    }
+    if "subject_domain" not in qi_columns:
+        conn.execute(
+            "ALTER TABLE question_import_items ADD COLUMN subject_domain TEXT NOT NULL DEFAULT ''"
+        )
 
 
 def get_chat_memory_connection() -> sqlite3.Connection:

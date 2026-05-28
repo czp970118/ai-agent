@@ -12,6 +12,7 @@ from uuid import uuid4
 from ..chat.chat_memory_db import init_chat_memory_db, utc_now_iso
 from ..chat.memory_store import _db_path
 from .import_store import get_import, list_import_items
+from .tags import normalize_tags, tags_from_json, tags_to_json
 
 
 def _connect() -> sqlite3.Connection:
@@ -39,6 +40,7 @@ def _bank_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "importId": str(row["import_id"] or ""),
         "importItemId": str(row["import_item_id"] or ""),
         "category": str(row["category"] or ""),
+        "subjectDomain": str(row["subject_domain"] or ""),
         "questionType": str(row["question_type"] or "single"),
         "header": str(row["header"] or ""),
         "stem": str(row["stem"] or ""),
@@ -47,6 +49,7 @@ def _bank_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "explanation": str(row["explanation"] or ""),
         "extraTitle": str(row["extra_title"] or ""),
         "extraText": str(row["extra_text"] or ""),
+        "tags": tags_from_json(str(row["tags_json"] or "[]")),
         "status": str(row["status"] or ""),
         "sortOrder": int(row["sort_order"] or 0),
         "usedAt": str(row["used_at"] or ""),
@@ -55,16 +58,25 @@ def _bank_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _append_tags_filter(where: list[str], params: list[Any], tags: list[str] | None) -> None:
+    for tag in normalize_tags(tags or []):
+        where.append("tags_json LIKE ?")
+        params.append(f'%"{tag}"%')
+
+
 def list_questions(
     *,
     status: str = "ready",
     category: str = "",
+    subject_domain: str = "",
     usage: str = "",
+    tags: list[str] | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
     st = str(status or "ready").strip() or "ready"
     cat = str(category or "").strip()
+    domain = str(subject_domain or "").strip()
     usage_key = str(usage or "").strip().lower()
     lim = max(1, min(int(limit), 500))
     off = max(0, int(offset))
@@ -73,16 +85,24 @@ def list_questions(
     if cat:
         where.append("category = ?")
         params.append(cat)
+    if domain:
+        where.append("subject_domain = ?")
+        params.append(domain)
     if usage_key == "unused":
         where.append("(used_at IS NULL OR used_at = '')")
     elif usage_key == "used":
         where.append("used_at != ''")
+    _append_tags_filter(where, params, tags)
 
     base_where = ["status = ?"]
     base_params: list[Any] = [st]
     if cat:
         base_where.append("category = ?")
         base_params.append(cat)
+    if domain:
+        base_where.append("subject_domain = ?")
+        base_params.append(domain)
+    _append_tags_filter(base_where, base_params, tags)
     base_clause = " AND ".join(base_where)
 
     clause = " AND ".join(where)
@@ -129,11 +149,14 @@ def recall_random_questions(
     count: int = 7,
     exclude_ids: list[str] | None = None,
     category: str = "",
+    subject_domain: str = "",
+    tags: list[str] | None = None,
     status: str = "ready",
 ) -> dict[str, Any]:
     cnt = max(1, min(int(count), 20))
     st = str(status or "ready").strip() or "ready"
     cat = str(category or "").strip()
+    domain = str(subject_domain or "").strip()
     exclude = [str(x).strip() for x in (exclude_ids or []) if str(x).strip()]
 
     where = ["status = ?"]
@@ -141,7 +164,11 @@ def recall_random_questions(
     if cat:
         where.append("category = ?")
         params.append(cat)
+    if domain:
+        where.append("subject_domain = ?")
+        params.append(domain)
     where.append("(used_at IS NULL OR used_at = '')")
+    _append_tags_filter(where, params, tags)
     if exclude:
         placeholders = ",".join("?" * len(exclude))
         where.append(f"id NOT IN ({placeholders})")
@@ -171,10 +198,110 @@ def recall_random_questions(
     }
 
 
+def get_question(question_id: str) -> dict[str, Any]:
+    qid = str(question_id or "").strip()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM question_bank WHERE id = ?",
+            (qid,),
+        ).fetchone()
+    if not row:
+        raise ValueError("题目不存在")
+    return _bank_row_to_dict(row)
+
+
+def patch_question(question_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    qid = str(question_id or "").strip()
+    current = get_question(qid)
+    header = patch.get("header", current["header"])
+    stem = str(patch.get("stem", current["stem"]) or "").strip()
+    options = patch.get("options", current["options"])
+    answer = str(patch.get("answer", current["answer"]) or "").strip().upper()
+    explanation = patch.get("explanation", current["explanation"])
+    extra_title = patch.get("extraTitle", patch.get("extra_title", current["extraTitle"]))
+    extra_text = patch.get("extraText", patch.get("extra_text", current["extraText"]))
+    category = patch.get("category", current["category"])
+    subject_domain = patch.get(
+        "subjectDomain", patch.get("subject_domain", current["subjectDomain"])
+    )
+    tags = patch.get("tags", current.get("tags"))
+    if not stem:
+        raise ValueError("题干不能为空")
+    opts = [str(x).strip() for x in (options or []) if str(x).strip()]
+    if len(opts) < 2:
+        raise ValueError("至少两个选项")
+    if not answer:
+        raise ValueError("答案不能为空")
+
+    sh = stem_hash(stem)
+    now = utc_now_iso()
+    tag_json = tags_to_json(tags if tags is not None else current.get("tags") or [])
+
+    with _connect() as conn:
+        exists = conn.execute(
+            """
+            SELECT id FROM question_bank
+            WHERE stem_hash = ? AND status = 'ready' AND id != ?
+            """,
+            (sh, qid),
+        ).fetchone()
+        if exists:
+            raise ValueError("与已有题目题干重复，无法保存")
+        conn.execute(
+            """
+            UPDATE question_bank SET
+                header = ?, stem = ?, options_json = ?, answer = ?,
+                explanation = ?, extra_title = ?, extra_text = ?,
+                category = ?, subject_domain = ?, tags_json = ?,
+                stem_hash = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                str(header or ""),
+                stem,
+                json.dumps(opts, ensure_ascii=False),
+                answer,
+                str(explanation or ""),
+                str(extra_title or ""),
+                str(extra_text or ""),
+                str(category or ""),
+                str(subject_domain or ""),
+                tag_json,
+                sh,
+                now,
+                qid,
+            ),
+        )
+        conn.commit()
+    return get_question(qid)
+
+
+def delete_questions(question_ids: list[str]) -> dict[str, Any]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for raw in question_ids:
+        qid = str(raw or "").strip()
+        if not qid or qid in seen:
+            continue
+        seen.add(qid)
+        ids.append(qid)
+    if not ids:
+        return {"requested": 0, "deleted": 0}
+
+    deleted = 0
+    with _connect() as conn:
+        for qid in ids:
+            cur = conn.execute("DELETE FROM question_bank WHERE id = ?", (qid,))
+            deleted += int(cur.rowcount or 0)
+        conn.commit()
+    return {"requested": len(ids), "deleted": deleted}
+
+
 def confirm_import(
     import_id: str,
     *,
     item_ids: list[str] | None = None,
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     imp = get_import(import_id)
     if imp["status"] != "parsed":
@@ -189,6 +316,7 @@ def confirm_import(
     if not items:
         raise ValueError("请至少选择一道题目")
 
+    tag_json = tags_to_json(tags or [])
     now = utc_now_iso()
     inserted = 0
     skipped = 0
@@ -211,9 +339,9 @@ def confirm_import(
                 INSERT INTO question_bank (
                     id, import_id, import_item_id, category, question_type,
                     header, stem, options_json, answer, explanation,
-                    extra_title, extra_text, status, stem_hash, sort_order,
+                    extra_title, extra_text, tags_json, subject_domain, status, stem_hash, sort_order,
                     used_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, '', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, '', ?, ?)
                 """,
                 (
                     qid,
@@ -228,6 +356,8 @@ def confirm_import(
                     it["explanation"],
                     it["extraTitle"],
                     it["extraText"],
+                    tag_json,
+                    str(it.get("subjectDomain") or ""),
                     sh,
                     it["rowIndex"],
                     now,

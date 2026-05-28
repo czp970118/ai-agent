@@ -33,6 +33,7 @@ export type QuestionImportItem = {
   extraTitle: string;
   extraText: string;
   category: string;
+  subjectDomain?: string;
   questionType: string;
   confidence: number | null;
   selected: boolean;
@@ -56,6 +57,8 @@ export type QuestionBankItem = {
   extraTitle?: string;
   extraText?: string;
   questionType?: string;
+  subjectDomain?: string;
+  tags?: string[];
   status: string;
   usedAt?: string;
   createdAt: string;
@@ -135,24 +138,39 @@ export type ParseImportResult = {
 };
 
 export async function uploadQuestionExtract(
-  file: File | null,
+  files: File[],
   category: string,
-  answerFile?: File | null,
 ): Promise<UploadExtractResult> {
   const form = new FormData();
-  if (file) {
-    form.append("file", file);
+  for (const file of files) {
+    form.append("files", file);
   }
   form.append("category", category);
-  if (answerFile) {
-    form.append("answer_file", answerFile);
-  }
   const res = await fetch(questionsUrl("/import/upload"), {
     method: "POST",
     body: form,
   });
   if (!res.ok) {
     throw new Error(await parseError(res, "上传失败"));
+  }
+  return res.json();
+}
+
+export async function pasteQuestionExtract(input: {
+  category: string;
+  text: string;
+}): Promise<UploadExtractResult> {
+  const res = await fetch(questionsUrl("/import/paste"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      category: input.category,
+      question_text: input.text,
+      answer_text: "",
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseError(res, "提交失败"));
   }
   return res.json();
 }
@@ -188,7 +206,9 @@ export type QuestionBankUsageFilter = "all" | "unused" | "used";
 
 export async function listQuestionBank(params?: {
   category?: string;
+  subjectDomain?: string;
   usage?: QuestionBankUsageFilter;
+  tags?: string[];
   limit?: number;
   offset?: number;
 }): Promise<{
@@ -199,7 +219,9 @@ export async function listQuestionBank(params?: {
 }> {
   const q = new URLSearchParams();
   if (params?.category) q.set("category", params.category);
+  if (params?.subjectDomain) q.set("subject_domain", params.subjectDomain);
   if (params?.usage && params.usage !== "all") q.set("usage", params.usage);
+  if (params?.tags?.length) q.set("tags", params.tags.join(","));
   if (params?.limit != null) q.set("limit", String(params.limit));
   if (params?.offset != null) q.set("offset", String(params.offset));
   const suffix = q.toString() ? `?${q}` : "";
@@ -221,6 +243,8 @@ export async function recallQuestions(input?: {
   count?: number;
   excludeIds?: string[];
   category?: string;
+  subjectDomain?: string;
+  tags?: string[];
 }): Promise<{
   items: QuestionBankItem[];
   requested: number;
@@ -234,6 +258,8 @@ export async function recallQuestions(input?: {
       count: input?.count ?? 7,
       exclude_ids: input?.excludeIds ?? [],
       category: input?.category ?? "",
+      subject_domain: input?.subjectDomain ?? "",
+      tags: input?.tags ?? [],
     }),
   });
 }
@@ -241,6 +267,7 @@ export async function recallQuestions(input?: {
 export async function confirmQuestionImport(
   importId: string,
   itemIds?: string[],
+  tags?: string[],
 ): Promise<{
   inserted: number;
   skippedDuplicates: number;
@@ -249,7 +276,10 @@ export async function confirmQuestionImport(
   return qbFetch(`/import/${importId}/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(itemIds?.length ? { item_ids: itemIds } : {}),
+    body: JSON.stringify({
+      ...(itemIds?.length ? { item_ids: itemIds } : {}),
+      tags: tags ?? [],
+    }),
   });
 }
 
@@ -271,4 +301,46 @@ export async function patchImportItem(
 
 export async function reparseImport(importId: string): Promise<ParseImportResult> {
   return qbFetch(`/import/${importId}/reparse`, { method: "POST" });
+}
+
+export async function patchQuestionBank(
+  questionId: string,
+  patch: Partial<
+    Pick<
+      QuestionBankItem,
+      | "header"
+      | "stem"
+      | "options"
+      | "answer"
+      | "explanation"
+      | "extraTitle"
+      | "extraText"
+      | "category"
+      | "subjectDomain"
+      | "tags"
+    >
+  >,
+): Promise<QuestionBankItem> {
+  const data = await qbFetch<{ item: QuestionBankItem }>(`/${questionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return data.item;
+}
+
+export async function deleteQuestionBank(questionId: string): Promise<number> {
+  const data = await qbFetch<{ deleted: number }>(`/${questionId}`, {
+    method: "DELETE",
+  });
+  return data.deleted;
+}
+
+export async function deleteQuestionBankBatch(ids: string[]): Promise<number> {
+  const data = await qbFetch<{ deleted: number }>("/delete-batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  return data.deleted;
 }

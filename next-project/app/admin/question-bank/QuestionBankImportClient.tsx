@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { adminFormStyles as ui } from "../components/formStyles";
 import CategorySelect from "./CategorySelect";
+import ConfirmAlertDialog from "./ConfirmAlertDialog";
 import ImportFileField from "./ImportFileField";
+import TagInput from "./TagInput";
 import {
   confirmQuestionImport,
   fetchExtractedText,
   fetchQuestionImportConfig,
   parseQuestionImport,
+  pasteQuestionExtract,
   patchImportItem,
   reparseImport,
   uploadQuestionExtract,
@@ -20,6 +23,13 @@ import {
 } from "./questionBankClient";
 
 const CATEGORIES = ["公基", "行测", "时政", "面试", "未分类"];
+
+type ImportMode = "upload" | "paste";
+
+type PendingConfirm =
+  | { kind: "parse" }
+  | { kind: "reparse" }
+  | { kind: "confirm"; count: number };
 
 function optionsToText(opts: string[]): string {
   return opts.join("\n");
@@ -32,12 +42,29 @@ function textToOptions(text: string): string[] {
     .filter(Boolean);
 }
 
+function validateImportFiles(
+  selected: File[],
+  allowedExts: string[],
+  maxBytes: number,
+): string | null {
+  for (const file of selected) {
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    if (!allowedExts.includes(ext)) {
+      return `「${file.name}」仅支持 .docx`;
+    }
+    if (file.size > maxBytes) {
+      return `「${file.name}」超过 ${Math.round(maxBytes / 1024 / 1024)}MB 上限`;
+    }
+  }
+  return null;
+}
+
 export default function QuestionBankImportClient() {
   const router = useRouter();
+  const [importMode, setImportMode] = useState<ImportMode>("upload");
   const [category, setCategory] = useState("公基");
-  const [file, setFile] = useState<File | null>(null);
-  const [answerFile, setAnswerFile] = useState<File | null>(null);
-  const [hasAnswerVolume, setHasAnswerVolume] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [pasteText, setPasteText] = useState("");
   const [uploading, setUploading] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -58,8 +85,9 @@ export default function QuestionBankImportClient() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<QuestionImportItem>>({});
   const [importConfig, setImportConfig] = useState<QuestionImportConfig | null>(null);
-
-  console.log('items--->', items);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [importTags, setImportTags] = useState<string[]>([]);
 
   useEffect(() => {
     fetchQuestionImportConfig()
@@ -86,7 +114,9 @@ export default function QuestionBankImportClient() {
   const showAnswerPreview = answerText.length > 0 || answerCharCount > 0;
   const hasExtractedText = questionCharCount > 0 || answerCharCount > 0;
   const canParse = hasExtracted && hasExtractedText && !uploading && !parsing;
-  const canUpload = Boolean(file || answerFile);
+  const canSubmitUpload = files.length > 0;
+  const canSubmitPaste = pasteText.trim().length > 0;
+  const canSubmit = importMode === "upload" ? canSubmitUpload : canSubmitPaste;
   const canConfirm =
     importMeta?.status === "parsed" && selectedCount > 0 && !uploading && !parsing && !confirming;
 
@@ -104,7 +134,6 @@ export default function QuestionBankImportClient() {
     setAnswerFormat(String(res.answerFormat ?? res.answer_format ?? ""));
     setCharCount(Number(res.charCount ?? res.char_count) || 0);
     setEstimatedLlmCalls(Number(res.estimatedLlmCalls ?? res.estimated_llm_calls) || 0);
-    setHasAnswerVolume(aText.length > 0 || Number(res.answerCharCount ?? res.answer_char_count) > 0);
   };
 
   const resetBatch = () => {
@@ -119,66 +148,57 @@ export default function QuestionBankImportClient() {
     setAnswerTruncated(false);
     setCharCount(0);
     setEstimatedLlmCalls(0);
-    setHasAnswerVolume(false);
     setItems([]);
     setWarnings([]);
+    setImportTags([]);
   };
 
-  const handleExtract = useCallback(async () => {
-    if (!file && !answerFile) {
-      setError("请至少选择题目卷或答案/解析卷之一");
+  const handleSubmitContent = useCallback(async () => {
+    if (importMode === "upload") {
+      if (!files.length) {
+        setError("请至少选择一个 .docx 文件");
+        return;
+      }
+      const maxBytes = importConfig?.maxUploadBytes ?? 20 * 1024 * 1024;
+      const err = validateImportFiles(files, allowedExts, maxBytes);
+      if (err) {
+        setError(err);
+        return;
+      }
+    } else if (!pasteText.trim()) {
+      setError("请粘贴文案内容");
       return;
     }
-    const maxBytes = importConfig?.maxUploadBytes ?? 20 * 1024 * 1024;
-    const checkFile = (selected: File, label: string): string | null => {
-      const ext = selected.name.toLowerCase().slice(selected.name.lastIndexOf("."));
-      if (!allowedExts.includes(ext)) {
-        return `${label}仅支持 .docx`;
-      }
-      if (selected.size > maxBytes) {
-        return `${label}超过 ${Math.round(maxBytes / 1024 / 1024)}MB 上限`;
-      }
-      return null;
-    };
-    if (file) {
-      const err = checkFile(file, "题目卷");
-      if (err) {
-        setError(err);
-        return;
-      }
-    }
-    if (answerFile) {
-      const err = checkFile(answerFile, "答案/解析卷");
-      if (err) {
-        setError(err);
-        return;
-      }
-    }
+
     setUploading(true);
     setError("");
     resetBatch();
     try {
-      const res = await uploadQuestionExtract(file, category, answerFile);
+      const res =
+        importMode === "upload"
+          ? await uploadQuestionExtract(files, category)
+          : await pasteQuestionExtract({
+              category,
+              text: pasteText,
+            });
       setImportMeta(res.import);
       applyExtractPreview(res as Record<string, unknown>);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "提取失败");
+      setError(e instanceof Error ? e.message : importMode === "upload" ? "提取失败" : "提交失败");
     } finally {
       setUploading(false);
     }
-  }, [file, answerFile, category, allowedExts, importConfig?.maxUploadBytes]);
+  }, [
+    importMode,
+    files,
+    category,
+    pasteText,
+    allowedExts,
+    importConfig?.maxUploadBytes,
+  ]);
 
-  const handleParse = useCallback(async () => {
+  const runParse = useCallback(async () => {
     if (!importMeta?.id) return;
-    if (
-      !window.confirm(
-        estimatedLlmCalls <= 1
-          ? "将把题目卷与答案卷合并全文发给 DeepSeek 做结构化。是否继续？"
-          : `将调用 DeepSeek 约 ${estimatedLlmCalls} 次，把文字结构化为题目。是否继续？`,
-      )
-    ) {
-      return;
-    }
     setParsing(true);
     setError("");
     setItems([]);
@@ -194,7 +214,32 @@ export default function QuestionBankImportClient() {
     } finally {
       setParsing(false);
     }
-  }, [importMeta?.id, estimatedLlmCalls]);
+  }, [importMeta?.id]);
+
+  const runReparse = useCallback(async () => {
+    if (!importMeta?.id) return;
+    setParsing(true);
+    setError("");
+    try {
+      const res = await reparseImport(importMeta.id);
+      setImportMeta(res.import);
+      setItems(res.items || []);
+      setWarnings(res.warnings || []);
+      if (!res.ok && res.error) setError(res.error);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "重新结构化失败");
+    } finally {
+      setParsing(false);
+    }
+  }, [importMeta?.id]);
+
+  const handleParse = () => {
+    setPendingConfirm({ kind: "parse" });
+  };
+
+  const handleReparse = () => {
+    setPendingConfirm({ kind: "reparse" });
+  };
 
   const handleReloadText = useCallback(async () => {
     if (!importMeta?.id) return;
@@ -209,32 +254,6 @@ export default function QuestionBankImportClient() {
       setUploading(false);
     }
   }, [importMeta?.id]);
-
-  const handleReparse = useCallback(async () => {
-    if (!importMeta?.id) return;
-    if (
-      !window.confirm(
-        estimatedLlmCalls <= 1
-          ? "将重新把合并全文发给 DeepSeek 结构化。是否继续？"
-          : `将重新调用 DeepSeek 约 ${estimatedLlmCalls} 次。是否继续？`,
-      )
-    ) {
-      return;
-    }
-    setParsing(true);
-    setError("");
-    try {
-      const res = await reparseImport(importMeta.id);
-      setImportMeta(res.import);
-      setItems(res.items || []);
-      setWarnings(res.warnings || []);
-      if (!res.ok && res.error) setError(res.error);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "重新结构化失败");
-    } finally {
-      setParsing(false);
-    }
-  }, [importMeta?.id, estimatedLlmCalls]);
 
   const toggleSelected = (id: string) => {
     setItems((prev) =>
@@ -253,6 +272,7 @@ export default function QuestionBankImportClient() {
       extraTitle: it.extraTitle,
       extraText: it.extraText,
       category: it.category,
+      subjectDomain: it.subjectDomain,
     });
   };
 
@@ -277,33 +297,95 @@ export default function QuestionBankImportClient() {
     }
   };
 
-  const handleConfirm = async () => {
+  const runConfirm = async () => {
     if (!importMeta?.id) return;
     const selected = items.filter((it) => it.selected);
     if (!selected.length) {
       setError("请至少勾选一道题");
       return;
     }
-    if (!window.confirm(`确认将 ${selected.length} 道题入库？`)) return;
     setConfirming(true);
     setError("");
     try {
       const res = await confirmQuestionImport(
         importMeta.id,
         selected.map((it) => it.id),
+        importTags,
       );
-      alert(
+      setSuccessMessage(
         `成功入库 ${res.inserted} 题${
           res.skippedDuplicates ? `，跳过重复 ${res.skippedDuplicates} 题` : ""
-        }`,
+        }${importTags.length ? `，标签：${importTags.join("、")}` : ""}`,
       );
-      router.push("/admin/question-bank");
     } catch (e) {
       setError(e instanceof Error ? e.message : "确认入库失败");
     } finally {
       setConfirming(false);
     }
   };
+
+  const handleConfirm = () => {
+    const selected = items.filter((it) => it.selected);
+    if (!selected.length) {
+      setError("请至少勾选一道题");
+      return;
+    }
+    setPendingConfirm({ kind: "confirm", count: selected.length });
+  };
+
+  const confirmDialogProps = useMemo(() => {
+    if (!pendingConfirm) return null;
+    if (pendingConfirm.kind === "parse") {
+      return {
+        title: "开始 AI 结构化",
+        message:
+          estimatedLlmCalls <= 1
+            ? "将把题目卷与答案卷合并全文发给 DeepSeek 做结构化。是否继续？"
+            : `将调用 DeepSeek 约 ${estimatedLlmCalls} 次，把文字结构化为题目。是否继续？`,
+        confirmLabel: "继续",
+        status: "warning" as const,
+      };
+    }
+    if (pendingConfirm.kind === "reparse") {
+      return {
+        title: "重新 AI 结构化",
+        message:
+          estimatedLlmCalls <= 1
+            ? "将重新把合并全文发给 DeepSeek 结构化。是否继续？"
+            : `将重新调用 DeepSeek 约 ${estimatedLlmCalls} 次。是否继续？`,
+        confirmLabel: "继续",
+        status: "warning" as const,
+      };
+    }
+    return {
+      title: "确认入库",
+      message: `确认将 ${pendingConfirm.count} 道题入库？`,
+      confirmLabel: "确认入库",
+      status: "accent" as const,
+    };
+  }, [pendingConfirm, estimatedLlmCalls]);
+
+  const handleConfirmDialogAction = async () => {
+    if (!pendingConfirm) return;
+    const action = pendingConfirm;
+    setPendingConfirm(null);
+    if (action.kind === "parse") {
+      await runParse();
+    } else if (action.kind === "reparse") {
+      await runReparse();
+    } else {
+      await runConfirm();
+    }
+  };
+
+  const submitLabel =
+    importMode === "upload"
+      ? uploading
+        ? "提取中…"
+        : "上传并提取文字"
+      : uploading
+        ? "提交中…"
+        : "提交文案";
 
   return (
     <div className={ui.page}>
@@ -318,7 +400,34 @@ export default function QuestionBankImportClient() {
       </div>
 
       <section className={`${ui.panel} mb-6 space-y-4`}>
-        <p className={ui.sectionTitle}>1. 上传并提取文字</p>
+        <p className={ui.sectionTitle}>1. 导入内容</p>
+
+        <div className="inline-flex rounded-lg border border-slate-300 p-0.5 dark:border-slate-700">
+          {(
+            [
+              ["upload", "上传文件"],
+              ["paste", "粘贴文案"],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              disabled={uploading || parsing}
+              className={
+                importMode === mode
+                  ? `${ui.buttonPrimary} rounded-md px-3 py-1.5 text-sm`
+                  : `${ui.buttonSecondary} border-0 bg-transparent px-3 py-1.5 text-sm shadow-none hover:bg-slate-100 dark:hover:bg-slate-800`
+              }
+              onClick={() => {
+                setImportMode(mode);
+                setError("");
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex flex-wrap items-end gap-3">
           <CategorySelect
             label="默认分类"
@@ -328,43 +437,54 @@ export default function QuestionBankImportClient() {
             disabled={uploading || parsing}
             options={CATEGORIES.map((c) => ({ id: c, label: c }))}
           />
-          <ImportFileField
-            label="题目卷（选填）"
-            disabled={uploading || parsing}
-            onChange={setFile}
-          />
-          <ImportFileField
-            label="答案/解析卷（选填）"
-            disabled={uploading || parsing}
-            onChange={setAnswerFile}
-          />
+
           <button
             type="button"
             className={`${ui.buttonPrimary} ${ui.controlH} shrink-0 self-end`}
-            disabled={uploading || parsing || !canUpload}
-            onClick={() => void handleExtract()}
+            disabled={uploading || parsing || !canSubmit}
+            onClick={() => void handleSubmitContent()}
           >
-            {uploading ? "提取中…" : "上传并提取文字"}
+            {submitLabel}
           </button>
         </div>
-        {(file || answerFile) && !importMeta ? (
-          <p className={ui.hint}>
-            已选：{file ? `题目「${file.name}」` : "（未选题目卷）"}
-            {file && answerFile ? "；" : ""}
-            {answerFile ? `解析「${answerFile.name}」` : file ? "（未选解析卷）" : ""}
-          </p>
+
+        {importMode === "upload" ? (
+          <ImportFileField
+            label="选择 .docx 文件（可多选）"
+            disabled={uploading || parsing}
+            files={files}
+            onChange={setFiles}
+          />
         ) : null}
+
+        {importMode === "paste" ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">粘贴内容</p>
+            <textarea
+              className={`${ui.textarea} min-h-[16rem] font-mono text-xs leading-relaxed`}
+              disabled={uploading || parsing}
+              placeholder="在此粘贴题目、选项、答案或解析等完整文案…"
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+            />
+          </div>
+        ) : null}
+
         {importMeta ? (
           <p className={ui.hint}>
             批次 {importMeta.id.slice(0, 8)}… · 状态 {importMeta.status} · {importMeta.filename}
             {charCount > 0 ? ` · 共 ${charCount.toLocaleString()} 字` : ""}
             {estimatedLlmCalls > 1 ? ` · 预计 DeepSeek ${estimatedLlmCalls} 次` : ""}
-            {hasAnswerVolume ? " · 已合并题目卷+解析卷" : ""}
+            {answerCharCount > 0 ? " · 已合并题目卷+解析卷" : ""}
           </p>
         ) : null}
+
         <p className={ui.hint}>
-          题目卷与答案/解析卷至少上传其一，均为 .docx。超长卷会自动分批调用 DeepSeek（页面上会显示预计次数）。
+          {importMode === "upload"
+            ? "可一次选择多个 .docx，系统将按顺序合并内容；若恰好 2 个文件，则第一个为题目卷、第二个为解析卷。超长卷会自动分批调用 DeepSeek。"
+            : "将完整文案粘贴到文本框，提交后可直接进行 AI 结构化。"}
         </p>
+
         {importMeta?.extractError ? (
           <p className={ui.error}>提取失败：{importMeta.extractError}</p>
         ) : null}
@@ -389,7 +509,7 @@ export default function QuestionBankImportClient() {
                 type="button"
                 className={ui.buttonPrimary}
                 disabled={!canParse}
-                onClick={() => void handleParse()}
+                onClick={handleParse}
               >
                 {parsing
                   ? "AI 结构化中…"
@@ -419,7 +539,7 @@ export default function QuestionBankImportClient() {
               placeholder={
                 questionCharCount > 0
                   ? undefined
-                  : hasAnswerVolume
+                  : answerCharCount > 0
                     ? "（未上传题目卷）"
                     : "（未提取到文字，请检查 docx 内容）"
               }
@@ -478,7 +598,7 @@ export default function QuestionBankImportClient() {
                   type="button"
                   className={ui.buttonSecondary}
                   disabled={parsing}
-                  onClick={() => void handleReparse()}
+                  onClick={handleReparse}
                 >
                   重新结构化
                 </button>
@@ -487,12 +607,20 @@ export default function QuestionBankImportClient() {
                 type="button"
                 className={ui.buttonPrimary}
                 disabled={!canConfirm}
-                onClick={() => void handleConfirm()}
+                onClick={handleConfirm}
               >
                 {confirming ? "入库中…" : "确认入库"}
               </button>
             </div>
           </div>
+
+          <TagInput
+            label="入库标签（选填，可多选）"
+            hint="例如：真题、19年。本次入库的题目将统一打上这些标签。"
+            tags={importTags}
+            disabled={confirming}
+            onChange={setImportTags}
+          />
 
           <div className="space-y-4">
             {items.map((it) => (
@@ -507,6 +635,11 @@ export default function QuestionBankImportClient() {
                     onChange={() => toggleSelected(it.id)}
                   />
                   <span className={ui.badge}>{it.category}</span>
+                  {it.subjectDomain ? (
+                    <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
+                      {it.subjectDomain}
+                    </span>
+                  ) : null}
                   <span className={ui.badge}>{it.header}</span>
                   <span className={ui.hint}>答案 {it.answer}</span>
                   {editingId !== it.id ? (
@@ -526,6 +659,14 @@ export default function QuestionBankImportClient() {
                       className={`${ui.input} w-full`}
                       value={editDraft.header ?? ""}
                       onChange={(e) => setEditDraft((d) => ({ ...d, header: e.target.value }))}
+                    />
+                    <input
+                      className={`${ui.input} w-full`}
+                      placeholder="领域，如：历史、地理"
+                      value={editDraft.subjectDomain ?? ""}
+                      onChange={(e) =>
+                        setEditDraft((d) => ({ ...d, subjectDomain: e.target.value }))
+                      }
                     />
                     <textarea
                       className={ui.textarea}
@@ -604,6 +745,40 @@ export default function QuestionBankImportClient() {
       {hasParsed && items.length === 0 && importMeta?.status === "parse_failed" ? (
         <p className={ui.hint}>结构化未得到题目，可检查上方提取文字后点击「重新结构化」。</p>
       ) : null}
+
+      {confirmDialogProps ? (
+        <ConfirmAlertDialog
+          open={pendingConfirm != null}
+          title={confirmDialogProps.title}
+          message={confirmDialogProps.message}
+          confirmLabel={confirmDialogProps.confirmLabel}
+          status={confirmDialogProps.status}
+          busy={parsing || confirming}
+          onOpenChange={(open) => {
+            if (!open) setPendingConfirm(null);
+          }}
+          onConfirm={() => void handleConfirmDialogAction()}
+        />
+      ) : null}
+
+      <ConfirmAlertDialog
+        open={Boolean(successMessage)}
+        title="入库成功"
+        message={successMessage}
+        confirmLabel="返回题库列表"
+        status="success"
+        hideCancel
+        onOpenChange={(open) => {
+          if (!open) {
+            setSuccessMessage("");
+            router.push("/admin/question-bank");
+          }
+        }}
+        onConfirm={() => {
+          setSuccessMessage("");
+          router.push("/admin/question-bank");
+        }}
+      />
     </div>
   );
 }

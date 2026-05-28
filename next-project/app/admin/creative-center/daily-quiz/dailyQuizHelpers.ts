@@ -2,6 +2,8 @@ import type { QuestionBankItem } from "@/app/admin/question-bank/questionBankCli
 import { toCoverDisplayUrl } from "../creativeCover";
 
 export const DAILY_QUIZ_SLOT_COUNT = 5;
+export const DAILY_QUIZ_RECALL_MIN = 1;
+export const DAILY_QUIZ_RECALL_MAX = 20;
 
 /** 题目卡顶栏标题：题库 header 常为「公基」，出图统一为「公基常识」 */
 export function quizQuestionCardHeader(header: string): string {

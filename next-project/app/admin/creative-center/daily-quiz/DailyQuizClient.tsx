@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { adminFormStyles as ui } from "@/app/admin/components/formStyles";
 import {
   recallQuestions,
   type QuestionBankItem,
 } from "@/app/admin/question-bank/questionBankClient";
+import CategorySelect from "@/app/admin/question-bank/CategorySelect";
+import TagInput from "@/app/admin/question-bank/TagInput";
 import {
   renderQuizAnswerCard,
   renderQuizQuestionCard,
@@ -14,6 +16,8 @@ import {
 import { exportDailyQuizZip } from "./dailyQuizExport";
 import { publishDailyQuiz } from "./dailyQuizPublish";
 import {
+  DAILY_QUIZ_RECALL_MAX,
+  DAILY_QUIZ_RECALL_MIN,
   DAILY_QUIZ_SLOT_COUNT,
   emptySlotFromQuestion,
   formatAnswerDisplay,
@@ -27,6 +31,8 @@ import {
   QuizImagePreviewModal,
   type QuizPreviewImage,
 } from "./QuizImagePreview";
+
+const CATEGORIES = ["", "公基", "行测", "时政", "面试", "未分类"];
 
 async function generateQuizPair(
   index: number,
@@ -54,6 +60,9 @@ async function generateQuizPair(
 export default function DailyQuizClient() {
   const sessionWorkId = useMemo(() => crypto.randomUUID(), []);
   const [category, setCategory] = useState("");
+  const [subjectDomain, setSubjectDomain] = useState("");
+  const [recallTags, setRecallTags] = useState<string[]>([]);
+  const [recallCount, setRecallCount] = useState(DAILY_QUIZ_SLOT_COUNT);
   const [slots, setSlots] = useState<DailyQuizSlot[]>([]);
   const [recalling, setRecalling] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -84,24 +93,26 @@ export default function DailyQuizClient() {
         count,
         excludeIds,
         category: category.trim(),
+        subjectDomain: subjectDomain.trim(),
+        tags: recallTags,
       });
       return data.items;
     },
-    [category],
+    [category, subjectDomain, recallTags],
   );
 
   const onRecallAll = useCallback(async () => {
     setRecalling(true);
     setError(null);
     try {
-      const items = await recallBatch(DAILY_QUIZ_SLOT_COUNT, []);
+      const items = await recallBatch(recallCount, []);
       setSlots(items.map((q) => emptySlotFromQuestion(q)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "召回失败");
     } finally {
       setRecalling(false);
     }
-  }, [recallBatch]);
+  }, [recallBatch, recallCount]);
 
   const onRerollSlot = useCallback(
     async (index: number) => {
@@ -205,34 +216,63 @@ export default function DailyQuizClient() {
         <p className={`${ui.hint} mb-4`}>
           水墨底图答题卡 / 答案解析卡，程序排版（非 AI 生图）。从题库召回未使用过的题目，生成双图后导出即视为准备发布：题目将标记为已使用，并保存到创作中心作品列表。
         </p>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="block text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">分类筛选</span>
-            <input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="留空表示全部分类"
-              className={`${ui.input} mt-1 w-40`}
+        <p className={ui.sectionTitle}>召回条件</p>
+        <div className={`${ui.panel} space-y-4`}>
+          <div className="flex flex-wrap items-end gap-3">
+            <CategorySelect
+              label="分类筛选"
+              aria-label="分类筛选"
+              value={category || "__all__"}
+              onChange={(v) => setCategory(v === "__all__" ? "" : v)}
+              disabled={recalling || slots.some((s) => s.busy)}
+              options={CATEGORIES.map((c) => ({
+                id: c || "__all__",
+                label: c || "全部",
+              }))}
             />
-          </label>
-          <button
-            type="button"
-            disabled={recalling || slots.some((s) => s.busy)}
-            onClick={() => void onRecallAll()}
-            className={`${ui.buttonPrimary} bg-amber-500 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-600`}
-          >
-            {recalling ? "召回中…" : `召回 ${DAILY_QUIZ_SLOT_COUNT} 道题`}
-          </button>
-          {slots.length > 0 ? (
+            <FilterTextField
+              label="领域筛选"
+              value={subjectDomain}
+              onChange={setSubjectDomain}
+              placeholder="如：历史、地理"
+              disabled={recalling || slots.some((s) => s.busy)}
+            />
+            <FilterNumberField
+              label="召回数量"
+              value={recallCount}
+              onChange={setRecallCount}
+              min={DAILY_QUIZ_RECALL_MIN}
+              max={DAILY_QUIZ_RECALL_MAX}
+              disabled={recalling || slots.some((s) => s.busy)}
+            />
             <button
               type="button"
               disabled={recalling || slots.some((s) => s.busy)}
-              onClick={() => void onGenerateAllImages()}
-              className={ui.buttonSecondary}
+              onClick={() => void onRecallAll()}
+              className={`${ui.buttonPrimary} ${ui.controlH} shrink-0 self-end bg-amber-500 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-600`}
             >
-              一键生成全部
+              {recalling ? "召回中…" : `召回 ${recallCount} 道题`}
             </button>
-          ) : null}
+            {slots.length > 0 ? (
+              <button
+                type="button"
+                disabled={recalling || slots.some((s) => s.busy)}
+                onClick={() => void onGenerateAllImages()}
+                className={`${ui.buttonSecondary} ${ui.controlH} shrink-0 self-end`}
+              >
+                一键生成全部
+              </button>
+            ) : null}
+          </div>
+          <TagInput
+            layout="toolbar"
+            label="标签筛选"
+            hint="可多选，留空表示不限；需同时包含所选标签"
+            tags={recallTags}
+            disabled={recalling || slots.some((s) => s.busy)}
+            placeholder="例如：真题、19年"
+            onChange={setRecallTags}
+          />
         </div>
         {slots.length > 0 ? (
           <p className={`${ui.hint} mt-3`}>
@@ -270,9 +310,11 @@ export default function DailyQuizClient() {
       ) : null}
 
       {slots.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-12 text-center text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/20 dark:text-slate-400">
-          点击「召回 {DAILY_QUIZ_SLOT_COUNT} 道题」从题库加载内容
-        </p>
+        <div
+          className={`${ui.panel} border-dashed px-4 py-12 text-center text-sm text-slate-600 dark:text-slate-400`}
+        >
+          点击「召回 {recallCount} 道题」从题库加载内容
+        </div>
       ) : (
         <>
           <ul className="space-y-4 pb-4">
@@ -314,6 +356,84 @@ export default function DailyQuizClient() {
   );
 }
 
+function FilterNumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  disabled,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  disabled?: boolean;
+}) {
+  const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  const commit = (raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    const next = Number.isFinite(parsed)
+      ? Math.min(max, Math.max(min, parsed))
+      : DAILY_QUIZ_SLOT_COUNT;
+    onChange(next);
+    setText(String(next));
+  };
+
+  return (
+    <div className="grid w-[5.5rem] shrink-0 gap-1 text-sm text-slate-700 dark:text-slate-200">
+      <span className={`${ui.hint} ${ui.toolbarLabel}`}>{label}</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={text}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(e) => setText(e.target.value.replace(/\D/g, ""))}
+        onBlur={() => commit(text)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit(text);
+        }}
+        className={`${ui.inputControl} ${ui.toolbarControl} w-full tabular-nums outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-800`}
+      />
+    </div>
+  );
+}
+
+function FilterTextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="grid min-w-[9rem] shrink-0 gap-1 text-sm text-slate-700 dark:text-slate-200">
+      <span className={`${ui.hint} ${ui.toolbarLabel}`}>{label}</span>
+      <input
+        type="text"
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${ui.inputControl} ${ui.toolbarControl} w-full min-w-[9rem] outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-800`}
+      />
+    </div>
+  );
+}
+
 function SlotCard({
   index,
   slot,
@@ -342,9 +462,22 @@ function SlotCard({
             {question.category ? (
               <span className={ui.badge}>{question.category}</span>
             ) : null}
+            {question.subjectDomain ? (
+              <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
+                {question.subjectDomain}
+              </span>
+            ) : null}
             {question.header ? (
               <span className={ui.badge}>{question.header}</span>
             ) : null}
+            {(question.tags ?? []).map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
+              >
+                {tag}
+              </span>
+            ))}
           </div>
           <p className="mt-2 text-sm text-slate-800 dark:text-slate-200">{question.stem}</p>
           <ul className={`mt-2 ${ui.hint}`}>

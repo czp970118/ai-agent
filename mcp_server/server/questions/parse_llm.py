@@ -20,7 +20,7 @@ PARSE_SYSTEM_PROMPT = (
     "输出格式：\n"
     '{"questions":[{"header":"公基常识","stem":"题干","options":["A. …","B. …"],'
     '"answer":"A","explanation":"…","extra_text":"",'
-    '"category":"","question_type":"single","confidence":0.9}],"warnings":[]}\n'
+    '"category":"","subject_domain":"历史","question_type":"single","confidence":0.9}],"warnings":[]}\n'
     "规则：\n"
     "1) 只提取真实题目，禁止编造。\n"
     "2) options 至少 2 项，带 A. B. 前缀；answer 为字母；多选 AB 且 question_type=multi。\n"
@@ -39,6 +39,9 @@ PARSE_SYSTEM_PROMPT = (
     "   - 正确项+干扰项：「新西兰四面环海、环境独特，无蛇类分布；澳大利亚、加拿大、巴西均有蛇。」\n"
     "   - 正确项+干扰项：「皮肤覆盖体表，是人体最大器官；肝脏最大实质性器官，心脏推动血液循环，肺主呼吸，均非最大。」\n"
     "9) extra_text 通常留空；仅当原文有与卡片无关的独立知识拓展时才填写，不要放选项辨析。\n"
+    "10) subject_domain（题目知识领域，2～6 字）：根据题干与选项判断所属领域，"
+    "从常见领域中选最贴切的一个，例如：日常、历史、地理、人文、法律、经济、科技、政治、文学、军事、生物、综合。"
+    "这是知识主题分类，与 category（考试卷种/默认分类）不同；无法判断时用「综合」。\n"
 )
 
 CARD_POLISH_SYSTEM_PROMPT = (
@@ -528,6 +531,13 @@ def _looks_like_abcd_listing(text: str) -> bool:
     return len(re.findall(r"[A-H][.、．:：]", str(text or ""), flags=re.I)) >= 2
 
 
+def _normalize_subject_domain(raw: Any) -> str:
+    domain = re.sub(r"\s+", "", str(raw or "").strip())
+    if not domain:
+        return "综合"
+    return domain[:12]
+
+
 def _normalize_question(q: dict[str, Any], default_category: str) -> dict[str, Any] | None:
     stem = str(q.get("stem") or "").strip()
     if not stem:
@@ -571,6 +581,9 @@ def _normalize_question(q: dict[str, Any], default_category: str) -> dict[str, A
         "extra_title": extra_title,
         "extra_text": extra_text,
         "category": cat,
+        "subject_domain": _normalize_subject_domain(
+            q.get("subject_domain") or q.get("subjectDomain") or q.get("domain")
+        ),
         "question_type": qtype,
         "confidence": confidence,
     }

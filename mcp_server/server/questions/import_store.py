@@ -65,6 +65,7 @@ def _item_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "extraTitle": str(row["extra_title"] or ""),
         "extraText": str(row["extra_text"] or ""),
         "category": str(row["category"] or ""),
+        "subjectDomain": str(row["subject_domain"] or ""),
         "questionType": str(row["question_type"] or "single"),
         "confidence": row["confidence"],
         "selected": bool(int(row["selected"] or 0)),
@@ -214,8 +215,8 @@ def insert_import_items(import_id: str, questions: list[dict[str, Any]]) -> list
                 INSERT INTO question_import_items (
                     id, import_id, row_index, header, stem, options_json,
                     answer, explanation, extra_title, extra_text,
-                    category, question_type, confidence, selected, edited, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
+                    category, question_type, subject_domain, confidence, selected, edited, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
                 """,
                 (
                     item_id,
@@ -230,6 +231,7 @@ def insert_import_items(import_id: str, questions: list[dict[str, Any]]) -> list
                     str(q.get("extra_text") or ""),
                     str(q.get("category") or ""),
                     str(q.get("question_type") or "single"),
+                    str(q.get("subject_domain") or ""),
                     q.get("confidence"),
                     now,
                 ),
@@ -281,6 +283,9 @@ def patch_import_item(
     extra_title = patch.get("extraTitle", patch.get("extra_title", current["extraTitle"]))
     extra_text = patch.get("extraText", patch.get("extra_text", current["extraText"]))
     category = patch.get("category", current["category"])
+    subject_domain = patch.get(
+        "subjectDomain", patch.get("subject_domain", current["subjectDomain"])
+    )
     question_type = patch.get("questionType", patch.get("question_type", current["questionType"]))
     selected = patch.get("selected", current["selected"])
     if not str(stem or "").strip():
@@ -297,7 +302,7 @@ def patch_import_item(
             UPDATE question_import_items SET
                 header = ?, stem = ?, options_json = ?, answer = ?,
                 explanation = ?, extra_title = ?, extra_text = ?,
-                category = ?, question_type = ?, selected = ?, edited = 1
+                category = ?, subject_domain = ?, question_type = ?, selected = ?, edited = 1
             WHERE import_id = ? AND id = ?
             """,
             (
@@ -309,6 +314,7 @@ def patch_import_item(
                 str(extra_title or ""),
                 str(extra_text or ""),
                 str(category or ""),
+                str(subject_domain or ""),
                 str(question_type or "single"),
                 1 if selected else 0,
                 iid,
