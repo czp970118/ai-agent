@@ -316,6 +316,25 @@ def init_chat_memory_db(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE question_bank ADD COLUMN subject_domain TEXT NOT NULL DEFAULT ''"
         )
+    if "is_real_exam" not in qb_columns:
+        conn.execute(
+            "ALTER TABLE question_bank ADD COLUMN is_real_exam INTEGER NOT NULL DEFAULT 0"
+        )
+    if "exam_year" not in qb_columns:
+        conn.execute(
+            "ALTER TABLE question_bank ADD COLUMN exam_year TEXT NOT NULL DEFAULT ''"
+        )
+    if "exam_region" not in qb_columns:
+        conn.execute(
+            "ALTER TABLE question_bank ADD COLUMN exam_region TEXT NOT NULL DEFAULT ''"
+        )
+    if "exam_kind" not in qb_columns:
+        conn.execute(
+            "ALTER TABLE question_bank ADD COLUMN exam_kind TEXT NOT NULL DEFAULT ''"
+        )
+    conn.execute(
+        "UPDATE question_bank SET exam_kind = '事业单位' WHERE exam_kind = '事业编'"
+    )
     qi_columns = {
         str(row[1]) for row in conn.execute("PRAGMA table_info(question_import_items)").fetchall()
     }

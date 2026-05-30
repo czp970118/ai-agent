@@ -12,6 +12,7 @@ from uuid import uuid4
 from ..chat.chat_memory_db import init_chat_memory_db, utc_now_iso
 from ..chat.memory_store import _db_path
 from .import_store import get_import, list_import_items
+from .real_exam import canonical_exam_kind, normalize_real_exam_meta
 from .tags import normalize_tags, tags_from_json, tags_to_json
 
 
@@ -50,6 +51,10 @@ def _bank_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "extraTitle": str(row["extra_title"] or ""),
         "extraText": str(row["extra_text"] or ""),
         "tags": tags_from_json(str(row["tags_json"] or "[]")),
+        "isRealExam": bool(int(row["is_real_exam"] or 0)),
+        "examYear": str(row["exam_year"] or ""),
+        "examRegion": str(row["exam_region"] or ""),
+        "examKind": canonical_exam_kind(str(row["exam_kind"] or "")),
         "status": str(row["status"] or ""),
         "sortOrder": int(row["sort_order"] or 0),
         "usedAt": str(row["used_at"] or ""),
@@ -151,6 +156,7 @@ def recall_random_questions(
     category: str = "",
     subject_domain: str = "",
     tags: list[str] | None = None,
+    real_exam_filter: str = "all",
     status: str = "ready",
 ) -> dict[str, Any]:
     cnt = max(1, min(int(count), 20))
@@ -168,6 +174,11 @@ def recall_random_questions(
         where.append("subject_domain = ?")
         params.append(domain)
     where.append("(used_at IS NULL OR used_at = '')")
+    exam_filt = str(real_exam_filter or "all").strip().lower()
+    if exam_filt == "only":
+        where.append("is_real_exam = 1")
+    elif exam_filt == "exclude":
+        where.append("is_real_exam = 0")
     _append_tags_filter(where, params, tags)
     if exclude:
         placeholders = ",".join("?" * len(exclude))
@@ -225,6 +236,27 @@ def patch_question(question_id: str, patch: dict[str, Any]) -> dict[str, Any]:
         "subjectDomain", patch.get("subject_domain", current["subjectDomain"])
     )
     tags = patch.get("tags", current.get("tags"))
+    if "isRealExam" in patch or "is_real_exam" in patch:
+        is_real_exam = bool(patch.get("isRealExam", patch.get("is_real_exam")))
+    else:
+        is_real_exam = bool(current.get("isRealExam"))
+    exam_year = str(
+        patch.get("examYear", patch.get("exam_year", current.get("examYear"))) or ""
+    )
+    exam_region = str(
+        patch.get("examRegion", patch.get("exam_region", current.get("examRegion")))
+        or ""
+    )
+    exam_kind = str(
+        patch.get("examKind", patch.get("exam_kind", current.get("examKind"))) or ""
+    )
+    year, region, kind = normalize_real_exam_meta(
+        is_real_exam=is_real_exam,
+        exam_year=exam_year,
+        exam_region=exam_region,
+        exam_kind=exam_kind,
+    )
+    real_exam_flag = 1 if is_real_exam else 0
     if not stem:
         raise ValueError("题干不能为空")
     opts = [str(x).strip() for x in (options or []) if str(x).strip()]
@@ -253,6 +285,7 @@ def patch_question(question_id: str, patch: dict[str, Any]) -> dict[str, Any]:
                 header = ?, stem = ?, options_json = ?, answer = ?,
                 explanation = ?, extra_title = ?, extra_text = ?,
                 category = ?, subject_domain = ?, tags_json = ?,
+                is_real_exam = ?, exam_year = ?, exam_region = ?, exam_kind = ?,
                 stem_hash = ?, updated_at = ?
             WHERE id = ?
             """,
@@ -267,6 +300,10 @@ def patch_question(question_id: str, patch: dict[str, Any]) -> dict[str, Any]:
                 str(category or ""),
                 str(subject_domain or ""),
                 tag_json,
+                real_exam_flag,
+                year,
+                region,
+                kind,
                 sh,
                 now,
                 qid,
@@ -302,6 +339,10 @@ def confirm_import(
     *,
     item_ids: list[str] | None = None,
     tags: list[str] | None = None,
+    is_real_exam: bool = False,
+    exam_year: str = "",
+    exam_region: str = "",
+    exam_kind: str = "",
 ) -> dict[str, Any]:
     imp = get_import(import_id)
     if imp["status"] != "parsed":
@@ -317,6 +358,13 @@ def confirm_import(
         raise ValueError("请至少选择一道题目")
 
     tag_json = tags_to_json(tags or [])
+    year, region, kind = normalize_real_exam_meta(
+        is_real_exam=is_real_exam,
+        exam_year=exam_year,
+        exam_region=exam_region,
+        exam_kind=exam_kind,
+    )
+    real_exam_flag = 1 if is_real_exam else 0
     now = utc_now_iso()
     inserted = 0
     skipped = 0
@@ -339,9 +387,11 @@ def confirm_import(
                 INSERT INTO question_bank (
                     id, import_id, import_item_id, category, question_type,
                     header, stem, options_json, answer, explanation,
-                    extra_title, extra_text, tags_json, subject_domain, status, stem_hash, sort_order,
+                    extra_title, extra_text, tags_json, subject_domain, is_real_exam,
+                    exam_year, exam_region, exam_kind,
+                    status, stem_hash, sort_order,
                     used_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, '', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, '', ?, ?)
                 """,
                 (
                     qid,
@@ -358,6 +408,10 @@ def confirm_import(
                     it["extraText"],
                     tag_json,
                     str(it.get("subjectDomain") or ""),
+                    real_exam_flag,
+                    year,
+                    region,
+                    kind,
                     sh,
                     it["rowIndex"],
                     now,

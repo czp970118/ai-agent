@@ -3,11 +3,17 @@
 import { useEffect, useState } from "react";
 import { adminFormStyles as ui } from "../components/formStyles";
 import CategorySelect from "./CategorySelect";
+import RealExamFields from "./RealExamFields";
 import TagInput from "./TagInput";
 import {
   patchQuestionBank,
   type QuestionBankItem,
 } from "./questionBankClient";
+import {
+  formatRealExamSummary,
+  realExamKindNeedsRegion,
+  realExamKindsLabel,
+} from "./realExam";
 
 const CATEGORIES = ["公基", "行测", "时政", "面试", "未分类"];
 
@@ -45,6 +51,10 @@ export default function QuestionBankEditDialog({
   const [category, setCategory] = useState("公基");
   const [subjectDomain, setSubjectDomain] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [isRealExam, setIsRealExam] = useState(false);
+  const [examKind, setExamKind] = useState("");
+  const [examYear, setExamYear] = useState("");
+  const [examRegion, setExamRegion] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -58,12 +68,30 @@ export default function QuestionBankEditDialog({
     setCategory(item.category || "公基");
     setSubjectDomain(item.subjectDomain || "");
     setTags(item.tags ?? []);
+    setIsRealExam(Boolean(item.isRealExam));
+    setExamKind(item.examKind || "");
+    setExamYear(item.examYear || "");
+    setExamRegion(item.examRegion || "");
     setError("");
   }, [item]);
 
   if (!open || !item) return null;
 
   const handleSave = async () => {
+    if (isRealExam) {
+      if (!examKind) {
+        setError(`真题须选择考试类型：${realExamKindsLabel()}`);
+        return;
+      }
+      if (!examYear.trim()) {
+        setError("真题须填写年份");
+        return;
+      }
+      if (realExamKindNeedsRegion(examKind) && !examRegion.trim()) {
+        setError(`${examKind}须填写省份`);
+        return;
+      }
+    }
     setSaving(true);
     setError("");
     try {
@@ -76,6 +104,10 @@ export default function QuestionBankEditDialog({
         category,
         subjectDomain,
         tags,
+        isRealExam,
+        examYear: examYear.trim(),
+        examRegion: examRegion.trim(),
+        examKind: isRealExam ? examKind : "",
       });
       onSaved(updated);
       onClose();
@@ -170,6 +202,44 @@ export default function QuestionBankEditDialog({
             disabled={saving}
             onChange={setTags}
           />
+          <div className={`${ui.panel} space-y-3`}>
+            <p className={ui.sectionTitle}>真题配置</p>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={isRealExam}
+                disabled={saving}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsRealExam(checked);
+                  if (!checked) {
+                    setExamKind("");
+                    setExamYear("");
+                    setExamRegion("");
+                  }
+                }}
+              />
+              <span>本题为真题</span>
+            </label>
+            {isRealExam ? (
+              <RealExamFields
+                layout="form"
+                examKind={examKind}
+                examYear={examYear}
+                examRegion={examRegion}
+                disabled={saving}
+                onExamKindChange={setExamKind}
+                onExamYearChange={setExamYear}
+                onExamRegionChange={setExamRegion}
+              />
+            ) : null}
+            {isRealExam && examKind && examYear ? (
+              <p className={`${ui.hint} m-0`}>
+                预览：{formatRealExamSummary(examYear, examRegion, examKind)}
+              </p>
+            ) : null}
+          </div>
           {error ? <p className={ui.error}>{error}</p> : null}
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-700">

@@ -5,9 +5,15 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { adminFormStyles as ui } from "../components/formStyles";
 import CategorySelect from "./CategorySelect";
+import RealExamFields from "./RealExamFields";
 import ConfirmAlertDialog from "./ConfirmAlertDialog";
 import ImportFileField from "./ImportFileField";
 import TagInput from "./TagInput";
+import {
+  formatRealExamSummary,
+  realExamKindNeedsRegion,
+  realExamKindsLabel,
+} from "./realExam";
 import {
   confirmQuestionImport,
   fetchExtractedText,
@@ -88,6 +94,10 @@ export default function QuestionBankImportClient() {
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [importTags, setImportTags] = useState<string[]>([]);
+  const [importIsRealExam, setImportIsRealExam] = useState(false);
+  const [importExamKind, setImportExamKind] = useState("");
+  const [importExamYear, setImportExamYear] = useState("");
+  const [importExamRegion, setImportExamRegion] = useState("");
 
   useEffect(() => {
     fetchQuestionImportConfig()
@@ -151,6 +161,10 @@ export default function QuestionBankImportClient() {
     setItems([]);
     setWarnings([]);
     setImportTags([]);
+    setImportIsRealExam(false);
+    setImportExamKind("");
+    setImportExamYear("");
+    setImportExamRegion("");
     setEditingId(null);
     setEditDraft({});
   };
@@ -317,15 +331,22 @@ export default function QuestionBankImportClient() {
     setConfirming(true);
     setError("");
     try {
-      const res = await confirmQuestionImport(
-        importMeta.id,
-        selected.map((it) => it.id),
-        importTags,
-      );
+      const res = await confirmQuestionImport(importMeta.id, selected.map((it) => it.id), {
+        tags: importTags,
+        isRealExam: importIsRealExam,
+        examYear: importExamYear.trim(),
+        examRegion: importExamRegion.trim(),
+        examKind: importExamKind,
+      });
+      const examSummary = importIsRealExam
+        ? formatRealExamSummary(importExamYear.trim(), importExamRegion.trim(), importExamKind)
+        : "";
       setSuccessMessage(
         `成功入库 ${res.inserted} 题${
           res.skippedDuplicates ? `，跳过重复 ${res.skippedDuplicates} 题` : ""
-        }${importTags.length ? `，标签：${importTags.join("、")}` : ""}`,
+        }${examSummary ? `，${examSummary}` : ""}${
+          importTags.length ? `，标签：${importTags.join("、")}` : ""
+        }`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "确认入库失败");
@@ -339,6 +360,20 @@ export default function QuestionBankImportClient() {
     if (!selected.length) {
       setError("请至少勾选一道题");
       return;
+    }
+    if (importIsRealExam) {
+      if (!importExamKind) {
+        setError(`真题须选择考试类型：${realExamKindsLabel()}`);
+        return;
+      }
+      if (!importExamYear.trim()) {
+        setError("真题须填写年份");
+        return;
+      }
+      if (realExamKindNeedsRegion(importExamKind) && !importExamRegion.trim()) {
+        setError(`${importExamKind}须填写省份`);
+        return;
+      }
     }
     setPendingConfirm({ kind: "confirm", count: selected.length });
   };
@@ -436,6 +471,45 @@ export default function QuestionBankImportClient() {
               {label}
             </button>
           ))}
+        </div>
+
+        <div className={`${ui.panel} space-y-3`}>
+          <p className={ui.sectionTitle}>真题配置</p>
+          <label
+            className={`flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200 ${
+              uploading || parsing ? "pointer-events-none opacity-60" : ""
+            }`}
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300"
+              checked={importIsRealExam}
+              disabled={uploading || parsing}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setImportIsRealExam(checked);
+                if (!checked) {
+                  setImportExamKind("");
+                  setImportExamYear("");
+                  setImportExamRegion("");
+                }
+              }}
+            />
+            <span>本批为真题</span>
+          </label>
+          {importIsRealExam ? (
+            <RealExamFields
+              examKind={importExamKind}
+              examYear={importExamYear}
+              examRegion={importExamRegion}
+              disabled={uploading || parsing}
+              onExamKindChange={setImportExamKind}
+              onExamYearChange={setImportExamYear}
+              onExamRegionChange={setImportExamRegion}
+            />
+          ) : (
+            <p className={`${ui.hint} m-0`}>未开启时按普通题目入库，不记录考试信息。</p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
@@ -626,7 +700,7 @@ export default function QuestionBankImportClient() {
 
           <TagInput
             label="入库标签（选填，可多选）"
-            hint="例如：真题、19年。本次入库的题目将统一打上这些标签。"
+            hint="例如：19年、国考。本次入库的题目将统一打上这些标签。"
             tags={importTags}
             disabled={confirming}
             onChange={setImportTags}

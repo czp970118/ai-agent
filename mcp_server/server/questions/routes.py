@@ -140,6 +140,10 @@ class BatchSelectedPatch(BaseModel):
 class ConfirmImportBody(BaseModel):
     itemIds: list[str] | None = Field(default=None, alias="item_ids")
     tags: list[str] = Field(default_factory=list)
+    isRealExam: bool = Field(default=False, alias="is_real_exam")
+    examYear: str = Field(default="", alias="exam_year")
+    examRegion: str = Field(default="", alias="exam_region")
+    examKind: str = Field(default="", alias="exam_kind")
 
     model_config = {"populate_by_name": True}
 
@@ -158,6 +162,7 @@ class RecallQuestionsBody(BaseModel):
     category: str = ""
     subjectDomain: str = Field(default="", alias="subject_domain")
     tags: list[str] = Field(default_factory=list)
+    realExamFilter: str = Field(default="all", alias="real_exam_filter")
 
     model_config = {"populate_by_name": True}
 
@@ -191,6 +196,10 @@ class QuestionBankPatch(BaseModel):
     category: str | None = None
     subjectDomain: str | None = Field(default=None, alias="subject_domain")
     tags: list[str] | None = None
+    isRealExam: bool | None = Field(default=None, alias="is_real_exam")
+    examYear: str | None = Field(default=None, alias="exam_year")
+    examRegion: str | None = Field(default=None, alias="exam_region")
+    examKind: str | None = Field(default=None, alias="exam_kind")
 
     model_config = {"populate_by_name": True}
 
@@ -549,8 +558,20 @@ def register_question_routes(router: APIRouter) -> None:
     ) -> dict[str, Any]:
         item_ids = body.itemIds if body else None
         tags = body.tags if body else []
+        is_real_exam = body.isRealExam if body else False
+        exam_year = body.examYear if body else ""
+        exam_region = body.examRegion if body else ""
+        exam_kind = body.examKind if body else ""
         try:
-            return confirm_import(import_id, item_ids=item_ids, tags=tags)
+            return confirm_import(
+                import_id,
+                item_ids=item_ids,
+                tags=tags,
+                is_real_exam=is_real_exam,
+                exam_year=exam_year,
+                exam_region=exam_region,
+                exam_kind=exam_kind,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -644,9 +665,15 @@ def register_question_routes(router: APIRouter) -> None:
             category=str(body.category or "").strip(),
             subject_domain=str(body.subjectDomain or "").strip(),
             tags=body.tags,
+            real_exam_filter=body.realExamFilter,
         )
         if not data.get("items"):
             detail = "题库中没有可召回的未使用题目"
+            filt = str(body.realExamFilter or "all").strip().lower()
+            if filt == "only":
+                detail = "题库中没有符合条件的未使用真题"
+            elif filt == "exclude":
+                detail = "题库中没有符合条件的未使用非真题"
             if body.excludeIds:
                 detail += "（可能已全部在排除列表中或均已发布过）"
             raise HTTPException(status_code=400, detail=detail)

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { adminFormStyles as ui } from "@/app/admin/components/formStyles";
+import { formatRealExamSummary } from "@/app/admin/question-bank/realExam";
 import {
   recallQuestions,
   type QuestionBankItem,
@@ -19,10 +20,13 @@ import {
   DAILY_QUIZ_RECALL_MAX,
   DAILY_QUIZ_RECALL_MIN,
   DAILY_QUIZ_SLOT_COUNT,
+  RECALL_REAL_EXAM_OPTIONS,
   emptySlotFromQuestion,
+  type RecallRealExamFilter,
   formatAnswerDisplay,
   optionsToText,
   quizQuestionCardHeader,
+  quizQuestionCardStem,
   toQuizImageDisplayUrl,
   type DailyQuizSlot,
 } from "./dailyQuizHelpers";
@@ -43,7 +47,7 @@ async function generateQuizPair(
   const questionPath = await renderQuizQuestionCard({
     workId,
     header: quizQuestionCardHeader(q.header),
-    question: q.stem.trim(),
+    question: quizQuestionCardStem(q),
     optionsText: optionsToText(q.options),
   });
   const answerPath = await renderQuizAnswerCard({
@@ -63,6 +67,8 @@ export default function DailyQuizClient() {
   const [subjectDomain, setSubjectDomain] = useState("");
   const [recallTags, setRecallTags] = useState<string[]>([]);
   const [recallCount, setRecallCount] = useState(DAILY_QUIZ_SLOT_COUNT);
+  const [recallRealExamFilter, setRecallRealExamFilter] =
+    useState<RecallRealExamFilter>("all");
   const [slots, setSlots] = useState<DailyQuizSlot[]>([]);
   const [recalling, setRecalling] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -88,17 +94,22 @@ export default function DailyQuizClient() {
   );
 
   const recallBatch = useCallback(
-    async (count: number, excludeIds: string[]) => {
+    async (
+      count: number,
+      excludeIds: string[],
+      realExamFilter: RecallRealExamFilter = recallRealExamFilter,
+    ) => {
       const data = await recallQuestions({
         count,
         excludeIds,
         category: category.trim(),
         subjectDomain: subjectDomain.trim(),
         tags: recallTags,
+        realExamFilter,
       });
       return data.items;
     },
-    [category, subjectDomain, recallTags],
+    [category, subjectDomain, recallTags, recallRealExamFilter],
   );
 
   const onRecallAll = useCallback(async () => {
@@ -115,12 +126,12 @@ export default function DailyQuizClient() {
   }, [recallBatch, recallCount]);
 
   const onRerollSlot = useCallback(
-    async (index: number) => {
+    async (index: number, realExamFilter: RecallRealExamFilter) => {
       const excludeIds = slots.map((s) => s.question.id);
       updateSlot(index, { busy: "reroll" });
       setError(null);
       try {
-        const items = await recallBatch(1, excludeIds);
+        const items = await recallBatch(1, excludeIds, realExamFilter);
         const next = items[0];
         if (!next) throw new Error("没有可替换的题目");
         updateSlot(index, {
@@ -245,6 +256,12 @@ export default function DailyQuizClient() {
               max={DAILY_QUIZ_RECALL_MAX}
               disabled={recalling || slots.some((s) => s.busy)}
             />
+            <RecallRealExamFilterControl
+              label="真题范围"
+              value={recallRealExamFilter}
+              onChange={setRecallRealExamFilter}
+              disabled={recalling || slots.some((s) => s.busy)}
+            />
             <button
               type="button"
               disabled={recalling || slots.some((s) => s.busy)}
@@ -267,7 +284,7 @@ export default function DailyQuizClient() {
           <TagInput
             layout="toolbar"
             label="标签筛选"
-            hint="可多选，留空表示不限；需同时包含所选标签"
+            hint="可多选，留空表示不限；需同时包含所选标签。真题范围对批量召回与单题重新召回均生效。"
             tags={recallTags}
             disabled={recalling || slots.some((s) => s.busy)}
             placeholder="例如：真题、19年"
@@ -324,7 +341,8 @@ export default function DailyQuizClient() {
                 index={index}
                 slot={slot}
                 onGenerate={() => void onGeneratePair(index)}
-                onReroll={() => void onRerollSlot(index)}
+                defaultRerollFilter={recallRealExamFilter}
+                onReroll={(mode) => void onRerollSlot(index, mode)}
                 onPreview={setPreviewImage}
               />
             ))}
@@ -352,6 +370,47 @@ export default function DailyQuizClient() {
         image={previewImage}
         onClose={() => setPreviewImage(null)}
       />
+    </div>
+  );
+}
+
+function RecallRealExamFilterControl({
+  label,
+  value,
+  onChange,
+  disabled,
+  compact,
+}: {
+  label: string;
+  value: RecallRealExamFilter;
+  onChange: (value: RecallRealExamFilter) => void;
+  disabled?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`grid shrink-0 gap-1 ${compact ? "" : "self-end"}`}>
+      <span className={`${ui.hint} ${ui.toolbarLabel}`}>{label}</span>
+      <div
+        className={`inline-flex rounded-lg border border-slate-300 p-0.5 dark:border-slate-700 ${
+          disabled ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
+        {RECALL_REAL_EXAM_OPTIONS.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            disabled={disabled}
+            className={
+              value === opt.id
+                ? `${ui.buttonPrimary} rounded-md px-2.5 py-1 text-xs`
+                : `${ui.buttonSecondary} border-0 bg-transparent px-2.5 py-1 text-xs shadow-none hover:bg-slate-100 dark:hover:bg-slate-800`
+            }
+            onClick={() => onChange(opt.id)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -437,19 +496,26 @@ function FilterTextField({
 function SlotCard({
   index,
   slot,
+  defaultRerollFilter,
   onGenerate,
   onReroll,
   onPreview,
 }: {
   index: number;
   slot: DailyQuizSlot;
+  defaultRerollFilter: RecallRealExamFilter;
   onGenerate: () => void;
-  onReroll: () => void;
+  onReroll: (mode: RecallRealExamFilter) => void;
   onPreview: (image: QuizPreviewImage) => void;
 }) {
   const { question, questionPath, answerPath, imageVersion, busy } = slot;
   const disabled = busy !== null;
   const hasImages = Boolean(questionPath && answerPath);
+  const [rerollFilter, setRerollFilter] = useState<RecallRealExamFilter>(defaultRerollFilter);
+
+  useEffect(() => {
+    setRerollFilter(defaultRerollFilter);
+  }, [defaultRerollFilter]);
 
   return (
     <li className={ui.page}>
@@ -459,6 +525,15 @@ function SlotCard({
             <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
               第 {index + 1} 题
             </span>
+            {question.isRealExam && question.examKind ? (
+              <span className={ui.badge}>
+                {formatRealExamSummary(
+                  question.examYear ?? "",
+                  question.examRegion ?? "",
+                  question.examKind,
+                )}
+              </span>
+            ) : null}
             {question.category ? (
               <span className={ui.badge}>{question.category}</span>
             ) : null}
@@ -496,27 +571,38 @@ function SlotCard({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onGenerate}
-          className={`${ui.buttonPrimary} bg-amber-500 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-600`}
-        >
-          {busy === "generating"
-            ? "生成中…"
-            : hasImages
-              ? "重新生成双图"
-              : "生成答题卡与解析图"}
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onReroll}
-          className={ui.buttonSecondary}
-        >
-          {busy === "reroll" ? "召回中…" : "重新召回"}
-        </button>
+      <div className="mt-4 space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={onGenerate}
+            className={`${ui.buttonPrimary} bg-amber-500 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-600`}
+          >
+            {busy === "generating"
+              ? "生成中…"
+              : hasImages
+                ? "重新生成双图"
+                : "生成答题卡与解析图"}
+          </button>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <RecallRealExamFilterControl
+            label="重新召回范围"
+            value={rerollFilter}
+            onChange={setRerollFilter}
+            disabled={disabled}
+            compact
+          />
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onReroll(rerollFilter)}
+            className={`${ui.buttonSecondary} ${ui.controlH}`}
+          >
+            {busy === "reroll" ? "召回中…" : "重新召回"}
+          </button>
+        </div>
       </div>
 
       {questionPath || answerPath ? (

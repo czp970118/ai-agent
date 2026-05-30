@@ -1,15 +1,44 @@
 import type { QuestionBankItem } from "@/app/admin/question-bank/questionBankClient";
+import { formatRealExamSummary } from "@/app/admin/question-bank/realExam";
 import { toCoverDisplayUrl } from "../creativeCover";
 
 export const DAILY_QUIZ_SLOT_COUNT = 5;
 export const DAILY_QUIZ_RECALL_MIN = 1;
 export const DAILY_QUIZ_RECALL_MAX = 20;
 
-/** 题目卡顶栏标题：题库 header 常为「公基」，出图统一为「公基常识」 */
+/** 召回时真题范围：全部 / 仅真题 / 不含真题 */
+export type RecallRealExamFilter = "all" | "only" | "exclude";
+
+export const RECALL_REAL_EXAM_OPTIONS: { id: RecallRealExamFilter; label: string }[] = [
+  { id: "all", label: "全部" },
+  { id: "only", label: "仅真题" },
+  { id: "exclude", label: "不含真题" },
+];
+
+/** 题目卡科目顶栏：题库 header 常为「公基」，出图统一为「公基常识」 */
 export function quizQuestionCardHeader(header: string): string {
   const h = String(header || "").trim();
   if (!h || h === "公基") return "公基常识";
   return h;
+}
+
+/** 题目卡题干：真题时在题干前加（年份+地区+考试类型） */
+export function quizQuestionCardStem(
+  q: Pick<
+    QuestionBankItem,
+    "stem" | "isRealExam" | "examYear" | "examRegion" | "examKind"
+  >,
+): string {
+  const stem = String(q.stem || "").trim();
+  if (q.isRealExam && q.examKind) {
+    const exam = formatRealExamSummary(
+      q.examYear ?? "",
+      q.examRegion ?? "",
+      q.examKind,
+    );
+    if (exam) return `（${exam}）${stem}`;
+  }
+  return stem;
 }
 
 export function optionsToText(options: string[]): string {

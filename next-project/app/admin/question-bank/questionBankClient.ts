@@ -1,4 +1,38 @@
 import { getMcpBaseUrl } from "@/app/assistant/utils/mcpBaseUrl";
+import { pickRealExamFields } from "./realExam";
+
+function mapQuestionBankItem(raw: Record<string, unknown>): QuestionBankItem {
+  const exam = pickRealExamFields(raw);
+  return {
+    id: String(raw.id ?? ""),
+    category: String(raw.category ?? ""),
+    header: String(raw.header ?? ""),
+    stem: String(raw.stem ?? ""),
+    options: Array.isArray(raw.options) ? raw.options.map(String) : [],
+    answer: String(raw.answer ?? ""),
+    explanation: String(raw.explanation ?? ""),
+    extraTitle: raw.extraTitle != null ? String(raw.extraTitle) : undefined,
+    extraText: raw.extraText != null ? String(raw.extraText) : undefined,
+    questionType:
+      raw.questionType != null ? String(raw.questionType) : undefined,
+    subjectDomain:
+      raw.subjectDomain != null
+        ? String(raw.subjectDomain)
+        : raw.subject_domain != null
+          ? String(raw.subject_domain)
+          : undefined,
+    tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
+    ...exam,
+    status: String(raw.status ?? ""),
+    usedAt:
+      raw.usedAt != null
+        ? String(raw.usedAt)
+        : raw.used_at != null
+          ? String(raw.used_at)
+          : undefined,
+    createdAt: String(raw.createdAt ?? raw.created_at ?? ""),
+  };
+}
 
 function questionsUrl(path: string): string {
   const root = `${getMcpBaseUrl().replace(/\/+$/, "")}/chat/questions`;
@@ -59,6 +93,10 @@ export type QuestionBankItem = {
   questionType?: string;
   subjectDomain?: string;
   tags?: string[];
+  isRealExam?: boolean;
+  examYear?: string;
+  examRegion?: string;
+  examKind?: string;
   status: string;
   usedAt?: string;
   createdAt: string;
@@ -232,7 +270,9 @@ export async function listQuestionBank(params?: {
     unusedTotal?: number;
   }>(suffix);
   return {
-    items: data.items || [],
+    items: (data.items || []).map((it) =>
+      mapQuestionBankItem(it as unknown as Record<string, unknown>),
+    ),
     total: data.total || 0,
     usedTotal: data.usedTotal ?? 0,
     unusedTotal: data.unusedTotal ?? 0,
@@ -245,6 +285,7 @@ export async function recallQuestions(input?: {
   category?: string;
   subjectDomain?: string;
   tags?: string[];
+  realExamFilter?: "all" | "only" | "exclude";
 }): Promise<{
   items: QuestionBankItem[];
   requested: number;
@@ -260,14 +301,23 @@ export async function recallQuestions(input?: {
       category: input?.category ?? "",
       subject_domain: input?.subjectDomain ?? "",
       tags: input?.tags ?? [],
+      real_exam_filter: input?.realExamFilter ?? "all",
     }),
   });
 }
 
+export type ConfirmImportOptions = {
+  tags?: string[];
+  isRealExam?: boolean;
+  examYear?: string;
+  examRegion?: string;
+  examKind?: string;
+};
+
 export async function confirmQuestionImport(
   importId: string,
   itemIds?: string[],
-  tags?: string[],
+  options?: ConfirmImportOptions,
 ): Promise<{
   inserted: number;
   skippedDuplicates: number;
@@ -278,7 +328,11 @@ export async function confirmQuestionImport(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       ...(itemIds?.length ? { item_ids: itemIds } : {}),
-      tags: tags ?? [],
+      tags: options?.tags ?? [],
+      is_real_exam: Boolean(options?.isRealExam),
+      exam_year: options?.examYear ?? "",
+      exam_region: options?.examRegion ?? "",
+      exam_kind: options?.examKind ?? "",
     }),
   });
 }
@@ -318,15 +372,19 @@ export async function patchQuestionBank(
       | "category"
       | "subjectDomain"
       | "tags"
+      | "isRealExam"
+      | "examYear"
+      | "examRegion"
+      | "examKind"
     >
   >,
 ): Promise<QuestionBankItem> {
-  const data = await qbFetch<{ item: QuestionBankItem }>(`/${questionId}`, {
+  const data = await qbFetch<{ item: Record<string, unknown> }>(`/${questionId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
-  return data.item;
+  return mapQuestionBankItem(data.item);
 }
 
 export async function deleteQuestionBank(questionId: string): Promise<number> {

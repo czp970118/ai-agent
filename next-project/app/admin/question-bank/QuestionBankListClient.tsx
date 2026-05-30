@@ -9,6 +9,7 @@ import ConfirmAlertDialog from "./ConfirmAlertDialog";
 import PaginationPageSizeSelect from "./PaginationPageSizeSelect";
 import QuestionBankEditDialog from "./QuestionBankEditDialog";
 import { formatQuestionUsedAt, isQuestionUsed } from "./questionBankFormat";
+import { formatRealExamSummary, questionHasRealExamMeta } from "./realExam";
 import {
   deleteQuestionBank,
   deleteQuestionBankBatch,
@@ -223,6 +224,7 @@ export default function QuestionBankListClient() {
                 />
               </th>
               <th className="px-3 py-2">分类</th>
+              <th className="px-3 py-2">真题</th>
               <th className="px-3 py-2">领域</th>
               <th className="px-3 py-2">标签</th>
               <th className="px-3 py-2">标题</th>
@@ -249,6 +251,19 @@ export default function QuestionBankListClient() {
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <span className={ui.badge}>{row.category || "—"}</span>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {questionHasRealExamMeta(row) ? (
+                      <span className={ui.badge} title="真题来源">
+                        {formatRealExamSummary(
+                          row.examYear ?? "",
+                          row.examRegion ?? "",
+                          row.examKind ?? "",
+                        )}
+                      </span>
+                    ) : (
+                      <span className={ui.hint}>—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {row.subjectDomain ? (
@@ -325,7 +340,7 @@ export default function QuestionBankListClient() {
             })}
             {!loading && items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
                   暂无题目，请先
                   <Link href="/admin/question-bank/import" className="mx-1 underline">
                     导入题库
