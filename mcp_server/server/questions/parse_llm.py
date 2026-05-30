@@ -11,6 +11,8 @@ from typing import Any
 import httpx
 
 from ..constants import DEEPSEEK_CHAT_URL
+from .exam_source import apply_exam_sources_from_text, merge_exam_meta_into_question
+from .real_exam import canonical_exam_kind
 
 logger = logging.getLogger("mcp_server.questions.parse")
 
@@ -20,7 +22,8 @@ PARSE_SYSTEM_PROMPT = (
     "输出格式：\n"
     '{"questions":[{"header":"公基常识","stem":"题干","options":["A. …","B. …"],'
     '"answer":"A","explanation":"…","extra_text":"",'
-    '"category":"","subject_domain":"历史","question_type":"single","confidence":0.9}],"warnings":[]}\n'
+    '"category":"","subject_domain":"历史","question_type":"single","confidence":0.9,'
+    '"is_real_exam":false,"exam_year":"","exam_region":"","exam_kind":"","exam_source_raw":""}],"warnings":[]}\n'
     "规则：\n"
     "1) 只提取真实题目，禁止编造。\n"
     "2) options 至少 2 项，带 A. B. 前缀；answer 为字母；多选 AB 且 question_type=multi。\n"
@@ -42,6 +45,11 @@ PARSE_SYSTEM_PROMPT = (
     "10) subject_domain（题目知识领域，2～6 字）：根据题干与选项判断所属领域，"
     "从常见领域中选最贴切的一个，例如：日常、历史、地理、人文、法律、经济、科技、政治、文学、军事、生物、综合。"
     "这是知识主题分类，与 category（考试卷种/默认分类）不同；无法判断时用「综合」。\n"
+    "11) 真题来源：若原文含「真题来源」「📌真题来源」等行，设 is_real_exam=true，"
+    "并填 exam_year（四位年份）、exam_region（省或地市，如广东、广州）、"
+    "exam_kind（仅限国考、省考、联考、事业单位、选调生之一）、exam_source_raw（来源原文）。"
+    "不要把来源行、✅答案、📝解析等标记行写入 stem 或 explanation。\n"
+    "12) 若原文为「✅答案：A」「📝解析：…」格式，answer/explanation 只取冒号后正文。\n"
 )
 
 CARD_POLISH_SYSTEM_PROMPT = (
@@ -572,7 +580,17 @@ def _normalize_question(q: dict[str, Any], default_category: str) -> dict[str, A
     if not extra_title and extra_text:
         extra_title = str(q.get("extra_title") or "").strip() or DEFAULT_EXTRA_TITLE
 
-    return {
+    is_real = bool(q.get("is_real_exam") or q.get("isRealExam"))
+    exam_year = str(q.get("exam_year") or q.get("examYear") or "").strip()
+    exam_region = str(q.get("exam_region") or q.get("examRegion") or "").strip()
+    exam_kind = canonical_exam_kind(str(q.get("exam_kind") or q.get("examKind") or ""))
+    exam_source_raw = str(
+        q.get("exam_source_raw") or q.get("exam_source") or q.get("examSource") or ""
+    ).strip()
+    if exam_year or exam_kind:
+        is_real = True
+
+    base = {
         "header": str(q.get("header") or "").strip() or "公基常识",
         "stem": stem,
         "options": options,
@@ -586,7 +604,13 @@ def _normalize_question(q: dict[str, Any], default_category: str) -> dict[str, A
         ),
         "question_type": qtype,
         "confidence": confidence,
+        "is_real_exam": is_real,
+        "exam_year": exam_year,
+        "exam_region": exam_region,
+        "exam_kind": exam_kind,
+        "exam_source_raw": exam_source_raw,
     }
+    return merge_exam_meta_into_question(base, None)
 
 
 def _apply_card_polish_item(item: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
@@ -810,6 +834,11 @@ async def parse_questions_from_text(
             "warnings": [],
             "raw_blocks": raw_blocks,
         }
+
+    all_questions, source_warnings = apply_exam_sources_from_text(all_questions, text)
+    for w in source_warnings:
+        if str(w).strip():
+            all_warnings.append(str(w).strip())
 
     return {
         "ok": bool(all_questions),

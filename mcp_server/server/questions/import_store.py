@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from ..chat.chat_memory_db import init_chat_memory_db, utc_now_iso
 from ..chat.memory_store import _db_path
+from .real_exam import canonical_exam_kind
 
 
 def _connect() -> sqlite3.Connection:
@@ -68,6 +69,11 @@ def _item_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "subjectDomain": str(row["subject_domain"] or ""),
         "questionType": str(row["question_type"] or "single"),
         "confidence": row["confidence"],
+        "isRealExam": bool(int(row["is_real_exam"] or 0)),
+        "examYear": str(row["exam_year"] or ""),
+        "examRegion": str(row["exam_region"] or ""),
+        "examKind": canonical_exam_kind(str(row["exam_kind"] or "")),
+        "examSourceRaw": str(row["exam_source_raw"] or ""),
         "selected": bool(int(row["selected"] or 0)),
         "edited": bool(int(row["edited"] or 0)),
         "createdAt": str(row["created_at"] or ""),
@@ -215,8 +221,10 @@ def insert_import_items(import_id: str, questions: list[dict[str, Any]]) -> list
                 INSERT INTO question_import_items (
                     id, import_id, row_index, header, stem, options_json,
                     answer, explanation, extra_title, extra_text,
-                    category, question_type, subject_domain, confidence, selected, edited, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
+                    category, question_type, subject_domain, confidence,
+                    is_real_exam, exam_year, exam_region, exam_kind, exam_source_raw,
+                    selected, edited, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
                 """,
                 (
                     item_id,
@@ -233,6 +241,11 @@ def insert_import_items(import_id: str, questions: list[dict[str, Any]]) -> list
                     str(q.get("question_type") or "single"),
                     str(q.get("subject_domain") or ""),
                     q.get("confidence"),
+                    1 if q.get("is_real_exam") else 0,
+                    str(q.get("exam_year") or ""),
+                    str(q.get("exam_region") or ""),
+                    canonical_exam_kind(str(q.get("exam_kind") or "")),
+                    str(q.get("exam_source_raw") or ""),
                     now,
                 ),
             )
@@ -288,6 +301,15 @@ def patch_import_item(
     )
     question_type = patch.get("questionType", patch.get("question_type", current["questionType"]))
     selected = patch.get("selected", current["selected"])
+    is_real_exam = patch.get("isRealExam", patch.get("is_real_exam", current["isRealExam"]))
+    exam_year = patch.get("examYear", patch.get("exam_year", current["examYear"]))
+    exam_region = patch.get("examRegion", patch.get("exam_region", current["examRegion"]))
+    exam_kind = canonical_exam_kind(
+        str(patch.get("examKind", patch.get("exam_kind", current["examKind"])) or "")
+    )
+    exam_source_raw = patch.get(
+        "examSourceRaw", patch.get("exam_source_raw", current["examSourceRaw"])
+    )
     if not str(stem or "").strip():
         raise ValueError("题干不能为空")
     opts = [str(x).strip() for x in (options or []) if str(x).strip()]
@@ -302,7 +324,9 @@ def patch_import_item(
             UPDATE question_import_items SET
                 header = ?, stem = ?, options_json = ?, answer = ?,
                 explanation = ?, extra_title = ?, extra_text = ?,
-                category = ?, subject_domain = ?, question_type = ?, selected = ?, edited = 1
+                category = ?, subject_domain = ?, question_type = ?,
+                is_real_exam = ?, exam_year = ?, exam_region = ?, exam_kind = ?,
+                exam_source_raw = ?, selected = ?, edited = 1
             WHERE import_id = ? AND id = ?
             """,
             (
@@ -316,6 +340,11 @@ def patch_import_item(
                 str(category or ""),
                 str(subject_domain or ""),
                 str(question_type or "single"),
+                1 if is_real_exam else 0,
+                str(exam_year or ""),
+                str(exam_region or ""),
+                str(exam_kind or ""),
+                str(exam_source_raw or ""),
                 1 if selected else 0,
                 iid,
                 it,

@@ -11,6 +11,7 @@ import ImportFileField from "./ImportFileField";
 import TagInput from "./TagInput";
 import {
   formatRealExamSummary,
+  questionHasRealExamMeta,
   realExamKindNeedsRegion,
   realExamKindsLabel,
 } from "./realExam";
@@ -508,7 +509,9 @@ export default function QuestionBankImportClient() {
               onExamRegionChange={setImportExamRegion}
             />
           ) : (
-            <p className={`${ui.hint} m-0`}>未开启时按普通题目入库，不记录考试信息。</p>
+            <p className={`${ui.hint} m-0`}>
+              未开启时，若粘贴内容含「📌真题来源」行，解析后仍会按每题来源自动标注真题并入库；无来源行则按普通题入库。
+            </p>
           )}
         </div>
 
@@ -722,6 +725,15 @@ export default function QuestionBankImportClient() {
                   {it.subjectDomain ? (
                     <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
                       {it.subjectDomain}
+                    </span>
+                  ) : null}
+                  {questionHasRealExamMeta(it) && it.examKind ? (
+                    <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                      {formatRealExamSummary(
+                        it.examYear ?? "",
+                        it.examRegion ?? "",
+                        it.examKind,
+                      )}
                     </span>
                   ) : null}
                   <span className={ui.badge}>{it.header}</span>

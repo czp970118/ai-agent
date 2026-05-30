@@ -70,6 +70,11 @@ export type QuestionImportItem = {
   subjectDomain?: string;
   questionType: string;
   confidence: number | null;
+  isRealExam?: boolean;
+  examYear?: string;
+  examRegion?: string;
+  examKind?: string;
+  examSourceRaw?: string;
   selected: boolean;
   edited: boolean;
 };

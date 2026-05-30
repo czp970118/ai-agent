@@ -12,7 +12,7 @@ from uuid import uuid4
 from ..chat.chat_memory_db import init_chat_memory_db, utc_now_iso
 from ..chat.memory_store import _db_path
 from .import_store import get_import, list_import_items
-from .real_exam import canonical_exam_kind, normalize_real_exam_meta
+from .real_exam import REAL_EXAM_KINDS_SET, canonical_exam_kind, normalize_real_exam_meta
 from .tags import normalize_tags, tags_from_json, tags_to_json
 
 
@@ -334,6 +334,52 @@ def delete_questions(question_ids: list[str]) -> dict[str, Any]:
     return {"requested": len(ids), "deleted": deleted}
 
 
+def _resolve_item_real_exam(
+    it: dict[str, Any],
+    *,
+    batch_is_real: bool,
+    batch_year: str,
+    batch_region: str,
+    batch_kind: str,
+) -> tuple[int, str, str, str]:
+    """单题解析来源优先，否则用批次真题配置。"""
+    item_year = str(it.get("examYear") or "").strip()
+    item_region = str(it.get("examRegion") or "").strip()
+    item_kind = canonical_exam_kind(str(it.get("examKind") or ""))
+    item_real = bool(it.get("isRealExam")) or bool(item_year or item_kind)
+
+    if item_real:
+        year = item_year or batch_year
+        region = item_region or batch_region
+        kind = item_kind or batch_kind
+        if kind not in REAL_EXAM_KINDS_SET:
+            if batch_kind in REAL_EXAM_KINDS_SET:
+                kind = batch_kind
+            else:
+                raise ValueError(
+                    f"第 {int(it.get('rowIndex') or 0) + 1} 题缺少有效考试类型，"
+                    f"请在预览中补全或勾选批次真题配置"
+                )
+        y, r, k = normalize_real_exam_meta(
+            is_real_exam=True,
+            exam_year=year,
+            exam_region=region,
+            exam_kind=kind,
+        )
+        return 1, y, r, k
+
+    if batch_is_real:
+        y, r, k = normalize_real_exam_meta(
+            is_real_exam=True,
+            exam_year=batch_year,
+            exam_region=batch_region,
+            exam_kind=batch_kind,
+        )
+        return 1, y, r, k
+
+    return 0, "", "", ""
+
+
 def confirm_import(
     import_id: str,
     *,
@@ -358,13 +404,16 @@ def confirm_import(
         raise ValueError("请至少选择一道题目")
 
     tag_json = tags_to_json(tags or [])
-    year, region, kind = normalize_real_exam_meta(
-        is_real_exam=is_real_exam,
-        exam_year=exam_year,
-        exam_region=exam_region,
-        exam_kind=exam_kind,
-    )
-    real_exam_flag = 1 if is_real_exam else 0
+    batch_year = str(exam_year or "").strip()
+    batch_region = str(exam_region or "").strip()
+    batch_kind = canonical_exam_kind(str(exam_kind or ""))
+    if is_real_exam:
+        batch_year, batch_region, batch_kind = normalize_real_exam_meta(
+            is_real_exam=True,
+            exam_year=batch_year,
+            exam_region=batch_region,
+            exam_kind=batch_kind,
+        )
     now = utc_now_iso()
     inserted = 0
     skipped = 0
@@ -381,6 +430,13 @@ def confirm_import(
                 skipped += 1
                 duplicate_stems.append(it["stem"][:80])
                 continue
+            real_exam_flag, year, region, kind = _resolve_item_real_exam(
+                it,
+                batch_is_real=is_real_exam,
+                batch_year=batch_year,
+                batch_region=batch_region,
+                batch_kind=batch_kind,
+            )
             qid = str(uuid4())
             conn.execute(
                 """
