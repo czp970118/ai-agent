@@ -170,6 +170,9 @@ class RecallQuestionsBody(BaseModel):
 class DailyQuizPublishSlot(BaseModel):
     questionId: str = Field(alias="question_id")
     stem: str = ""
+    options: list[str] = Field(default_factory=list)
+    answer: str = ""
+    explanation: str = ""
     questionPath: str = Field(alias="question_path")
     answerPath: str = Field(alias="answer_path")
 

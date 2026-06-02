@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -22,11 +23,25 @@ def _build_body(slots: list[dict[str, Any]]) -> str:
     lines: list[str] = ["每日一题批量出图，共 {} 题。".format(len(slots)), ""]
     for i, slot in enumerate(slots, start=1):
         stem = str(slot.get("stem") or "").strip()
+        qid = str(slot.get("questionId") or slot.get("question_id") or "").strip()
         q_path = str(slot.get("questionPath") or slot.get("question_path") or "").strip()
         a_path = str(slot.get("answerPath") or slot.get("answer_path") or "").strip()
+        options = slot.get("options")
+        if not isinstance(options, list):
+            options = []
+        answer = str(slot.get("answer") or "").strip()
+        explanation = str(slot.get("explanation") or "").strip()
         lines.append(f"## 第 {i} 题")
+        if qid:
+            lines.append(f"question_id: {qid}")
         if stem:
             lines.append(stem)
+        if options:
+            lines.append("options: " + json.dumps([str(x) for x in options], ensure_ascii=False))
+        if answer:
+            lines.append(f"answer: {answer}")
+        if explanation:
+            lines.append(f"explanation: {explanation}")
         if q_path:
             lines.append(f"- 题目卡：{q_path}")
         if a_path:

@@ -123,6 +123,16 @@ async function parseError(res: Response, fallback: string): Promise<string> {
   }
 }
 
+export async function getQuestionBankItem(questionId: string): Promise<QuestionBankItem> {
+  const data = await qbFetch<{ ok?: boolean; item: Record<string, unknown> }>(
+    `/${encodeURIComponent(questionId)}`,
+  );
+  if (!data?.item) {
+    throw new Error("题目不存在");
+  }
+  return mapQuestionBankItem(data.item);
+}
+
 export async function qbFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(questionsUrl(path), {
     ...init,

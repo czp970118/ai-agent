@@ -12,6 +12,8 @@ import {
   type CreativeCoverState,
 } from "../../creativeCover";
 import { useMaterialCache } from "../../useMaterialCache";
+import DailyQuizWorkDetailClient from "../../daily-quiz/DailyQuizWorkDetailClient";
+import { isDailyQuizWork } from "../../daily-quiz/parseDailyQuizBody";
 import {
   CreativeWork,
   deleteWork,
@@ -195,6 +197,10 @@ export default function WorkEditorClient() {
         </a>
       </div>
     );
+  }
+
+  if (isDailyQuizWork(work) && work.status === "ready") {
+    return <DailyQuizWorkDetailClient />;
   }
 
   const topSlot = (

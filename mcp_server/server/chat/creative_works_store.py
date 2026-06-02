@@ -59,6 +59,7 @@ def _require_cover_path(path: str) -> str:
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    created_ms = int(parse_iso_utc(str(row["created_at"])).timestamp() * 1000)
     updated_ms = int(parse_iso_utc(str(row["updated_at"])).timestamp() * 1000)
     st = str(row["status"] or "").strip()
     pf = str(row["platform"] or "").strip()
@@ -76,6 +77,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "coverRefUrls": _parse_ref_urls(_row_get(row, "cover_ref_urls", "[]")),
         "coverTitleMain": _row_get(row, "cover_title_main"),
         "coverTitleSub": _row_get(row, "cover_title_sub"),
+        "createdAt": created_ms,
         "updatedAt": updated_ms,
     }
 

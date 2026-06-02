@@ -12,6 +12,7 @@ export type CreativeWork = {
   domain: string;
   status: WorkStatus;
   platform: PlatformId;
+  createdAt?: number;
   updatedAt: number;
   coverPath?: string;
   coverSource?: string;

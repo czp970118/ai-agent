@@ -35,6 +35,9 @@ export async function publishDailyQuiz(input: {
       slots: input.slots.map((s) => ({
         question_id: s.question.id,
         stem: s.question.stem,
+        options: s.question.options,
+        answer: s.question.answer,
+        explanation: s.question.explanation,
         question_path: s.questionPath,
         answer_path: s.answerPath,
       })),
