@@ -1,4 +1,5 @@
 import Link from "next/link";
+import GuestFormalAccessEntry from "./components/GuestFormalAccessEntry";
 
 const ENTRIES = [
   {
@@ -57,6 +58,8 @@ export default function Home() {
             请选择要进入的功能
           </p>
         </header>
+
+        <GuestFormalAccessEntry />
 
         <nav
           className="mx-auto mt-8 grid w-full max-w-lg grid-cols-1 gap-3 sm:mt-10 md:max-w-3xl md:grid-cols-3 md:gap-4 lg:mt-12"

@@ -8,7 +8,7 @@ import { useGuestMode } from "./GuestModeContext";
 export default function AccessGateClient() {
   const sp = useSearchParams();
   const err = sp.get("e");
-  const { refresh } = useGuestMode();
+  const { refresh, isGuest, loading: guestSessionLoading } = useGuestMode();
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [errLocal, setErrLocal] = useState<string | null>(null);
@@ -101,12 +101,13 @@ export default function AccessGateClient() {
           Private access
         </p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-50 sm:text-[2rem]">
-          访问前请先申请
+          {isGuest ? "申请正式访问" : "访问前请先申请"}
         </h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-400">
-          审批通过后邮件会发送激活链接；已通过审核可再次提交同一邮箱，在新设备上收取链接。
-          也可使用访客模式预览（AI 可用，后台仅浏览）。
-        </p>
+        {!isGuest ? (
+          <p className="mt-3 text-sm leading-relaxed text-slate-400">
+            审批通过后邮件发送激活链接；也可访客模式预览。
+          </p>
+        ) : null}
 
         {(errHint || errLocal) && (
           <div
@@ -151,31 +152,37 @@ export default function AccessGateClient() {
             {loading ? "提交中…" : "发送申请 / 收取激活邮件"}
           </button>
 
-          <div className="flex items-center gap-3 py-0.5 text-xs text-slate-500">
-            <span className="h-px flex-1 bg-white/10" aria-hidden />
-            或
-            <span className="h-px flex-1 bg-white/10" aria-hidden />
-          </div>
+          {!guestSessionLoading && !isGuest ? (
+            <>
+              <div className="flex items-center gap-3 py-0.5 text-xs text-slate-500">
+                <span className="h-px flex-1 bg-white/10" aria-hidden />
+                或
+                <span className="h-px flex-1 bg-white/10" aria-hidden />
+              </div>
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void enterGuest()}
-            className="w-full rounded-xl border border-slate-500/50 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-100 transition hover:border-slate-400 hover:bg-slate-800/80 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {guestLoading ? "进入中…" : "访客模式进入"}
-          </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void enterGuest()}
+                className="w-full rounded-xl border border-slate-500/50 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-100 transition hover:border-slate-400 hover:bg-slate-800/80 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {guestLoading ? "进入中…" : "访客模式进入"}
+              </button>
+            </>
+          ) : null}
         </form>
 
-        <p className="mt-8 text-center text-xs text-slate-600">
-          换设备时，用同一邮箱再提交一次即可收到新激活链接。
-        </p>
+        {!isGuest ? (
+          <p className="mt-8 text-center text-xs text-slate-600">
+            换设备时，用同一邮箱再提交一次即可收到新激活链接。
+          </p>
+        ) : null}
         <p className="mt-4 text-center">
           <Link
             href="/"
             className="text-xs text-slate-500 underline-offset-4 hover:text-slate-300 hover:underline"
           >
-            返回首页（需已通过并激活）
+            返回首页
           </Link>
         </p>
       </div>
