@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SignJWT } from "jose";
-
-const COOKIE = "access_gate";
+import {
+  ACCESS_GATE_COOKIE,
+  cookieOptions,
+  signAccessJwt,
+} from "@/lib/accessGate";
 
 /** 重定向用站点根：优先 SITE_ORIGIN（与邮件里公网一致），避免 req.url 在错误 Host（如 0.0.0.0）下拼错。 */
 function siteRoot(req: NextRequest): string {
@@ -38,25 +40,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/access?e=invalid", root));
   }
 
-  const secret = process.env.ACCESS_GATE_JWT_SECRET;
-  if (!secret || secret.length < 16) {
+  let jwt: string;
+  try {
+    jwt = await signAccessJwt(email, "member");
+  } catch {
     return NextResponse.json({ error: "ACCESS_GATE_JWT_SECRET not set" }, { status: 500 });
   }
 
-  const jwt = await new SignJWT({ sub: email })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("30d")
-    .sign(new TextEncoder().encode(secret));
-
   const res = NextResponse.redirect(new URL("/", root));
-  const isProd = process.env.NODE_ENV === "production";
-  res.cookies.set(COOKIE, jwt, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  res.cookies.set(ACCESS_GATE_COOKIE, jwt, cookieOptions(60 * 60 * 24 * 30));
   return res;
 }

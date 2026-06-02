@@ -92,7 +92,8 @@ Next 容器读取 **`next-project/env.compose`**；Compose 内 MCP 服务名为 
 | `NEXT_PUBLIC_MCP_SERVER_URL` | 浏览器访问 MCP 的公网或本机地址 |
 | `INTERNAL_MCP_URL` | 服务端反代 MCP（如 `/access/*`） |
 | `ACCESS_GATE_ENABLED` | `1` 时启用站点门禁 |
-| `ACCESS_GATE_JWT_SECRET` | 门禁 JWT 签名密钥 |
+| `ACCESS_GATE_JWT_SECRET` | 门禁 JWT 签名密钥（访客与正式用户共用） |
+| （访客） | `/access` 页「访客模式进入」→ `POST /api/access/guest` 签发 `role=guest` Cookie；后台只读 |
 | `SITE_ORIGIN` | 激活重定向站点根（与邮件/公网域名一致，勿用 `0.0.0.0`） |
 
 ### MCP（`mcp_server/.env`）

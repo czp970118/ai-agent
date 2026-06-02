@@ -1,14 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
-
-const COOKIE = "access_gate";
+import {
+  ACCESS_GATE_COOKIE,
+  isAccessGateEnabled,
+  verifyAccessJwt,
+} from "@/lib/accessGate";
 
 export async function middleware(request: NextRequest) {
-  if (process.env.ACCESS_GATE_ENABLED !== "1") {
-    return NextResponse.next();
-  }
-  const secret = process.env.ACCESS_GATE_JWT_SECRET;
-  if (!secret || secret.length < 16) {
+  if (!isAccessGateEnabled()) {
     return NextResponse.next();
   }
 
@@ -22,22 +20,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const raw = request.cookies.get(COOKIE)?.value;
+  const raw = request.cookies.get(ACCESS_GATE_COOKIE)?.value;
   if (!raw) {
     return NextResponse.redirect(new URL("/access", request.url));
   }
 
-  try {
-    const { payload } = await jwtVerify(raw, new TextEncoder().encode(secret));
-    if (!payload.sub || typeof payload.sub !== "string") {
-      throw new Error("missing sub");
-    }
-    return NextResponse.next();
-  } catch {
+  const payload = await verifyAccessJwt(raw);
+  if (!payload) {
     const res = NextResponse.redirect(new URL("/access?e=session", request.url));
-    res.cookies.delete(COOKIE);
+    res.cookies.delete(ACCESS_GATE_COOKIE);
     return res;
   }
+
+  return NextResponse.next();
 }
 
 export const config = {
