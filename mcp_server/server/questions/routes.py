@@ -610,6 +610,7 @@ def register_question_routes(router: APIRouter) -> None:
         subject_domain: str = "",
         usage: str = "",
         tags: str = "",
+        keyword: str = "",
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -622,6 +623,7 @@ def register_question_routes(router: APIRouter) -> None:
             subject_domain=str(subject_domain or "").strip(),
             usage=usage,
             tags=tag_list or None,
+            keyword=str(keyword or "").strip(),
             limit=limit,
             offset=offset,
         )

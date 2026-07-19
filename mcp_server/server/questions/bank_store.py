@@ -69,6 +69,15 @@ def _append_tags_filter(where: list[str], params: list[Any], tags: list[str] | N
         params.append(f'%"{tag}"%')
 
 
+def _append_keyword_filter(where: list[str], params: list[Any], keyword: str) -> None:
+    kw = str(keyword or "").strip()
+    if not kw:
+        return
+    like = f"%{kw}%"
+    where.append("(stem LIKE ? OR header LIKE ? OR explanation LIKE ? OR extra_text LIKE ?)")
+    params.extend([like, like, like, like])
+
+
 def list_questions(
     *,
     status: str = "ready",
@@ -76,6 +85,7 @@ def list_questions(
     subject_domain: str = "",
     usage: str = "",
     tags: list[str] | None = None,
+    keyword: str = "",
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -83,6 +93,7 @@ def list_questions(
     cat = str(category or "").strip()
     domain = str(subject_domain or "").strip()
     usage_key = str(usage or "").strip().lower()
+    kw = str(keyword or "").strip()
     lim = max(1, min(int(limit), 500))
     off = max(0, int(offset))
     where = ["status = ?"]
@@ -98,6 +109,7 @@ def list_questions(
     elif usage_key == "used":
         where.append("used_at != ''")
     _append_tags_filter(where, params, tags)
+    _append_keyword_filter(where, params, kw)
 
     base_where = ["status = ?"]
     base_params: list[Any] = [st]
@@ -108,6 +120,7 @@ def list_questions(
         base_where.append("subject_domain = ?")
         base_params.append(domain)
     _append_tags_filter(base_where, base_params, tags)
+    _append_keyword_filter(base_where, base_params, kw)
     base_clause = " AND ".join(base_where)
 
     clause = " AND ".join(where)

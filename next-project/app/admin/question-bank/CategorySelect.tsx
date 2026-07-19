@@ -25,8 +25,8 @@ export default function CategorySelect({
   const selectedKey = value || options[0]?.id || "";
 
   return (
-    <div className="grid min-w-[9rem] shrink-0 gap-1 text-sm text-slate-700 dark:text-slate-200">
-      <span className={`${ui.hint} ${ui.toolbarLabel}`}>{label}</span>
+    <div className="flex min-w-[9rem] shrink-0 items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+      <span className={`${ui.hint} whitespace-nowrap font-medium`}>{label}</span>
       <Select
         aria-label={ariaLabel}
         variant="secondary"

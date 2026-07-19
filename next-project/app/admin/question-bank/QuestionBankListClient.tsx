@@ -37,8 +37,10 @@ export default function QuestionBankListClient() {
   const [unusedTotal, setUnusedTotal] = useState(0);
   const [category, setCategory] = useState("");
   const [usage, setUsage] = useState<QuestionBankUsageFilter>("all");
+  const [keyword, setKeyword] = useState("");
   const [appliedCategory, setAppliedCategory] = useState("");
   const [appliedUsage, setAppliedUsage] = useState<QuestionBankUsageFilter>("all");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
   const [limit, setLimit] = useState(20);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -63,6 +65,7 @@ export default function QuestionBankListClient() {
       const data = await listQuestionBank({
         category: appliedCategory || undefined,
         usage: appliedUsage,
+        keyword: appliedKeyword || undefined,
         limit,
         offset,
       });
@@ -75,11 +78,12 @@ export default function QuestionBankListClient() {
     } finally {
       setLoading(false);
     }
-  }, [appliedCategory, appliedUsage, limit, offset, searchKey]);
+  }, [appliedCategory, appliedUsage, appliedKeyword, limit, offset, searchKey]);
 
   const handleSearch = () => {
     setAppliedCategory(category);
     setAppliedUsage(usage);
+    setAppliedKeyword(keyword);
     setOffset(0);
     setSearchKey((k) => k + 1);
   };
@@ -186,6 +190,21 @@ export default function QuestionBankListClient() {
           disabled={loading}
           options={USAGE_OPTIONS.map((opt) => ({ id: opt.id, label: opt.label }))}
         />
+        <div className="flex min-w-[10rem] shrink-0 items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+          <span className="whitespace-nowrap font-medium text-slate-500 dark:text-slate-400">
+            关键字
+          </span>
+          <input
+            type="text"
+            placeholder="搜索题干/标题/解析…"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSearch();
+            }}
+            className={`${ui.inputControl} ${ui.controlH} w-full rounded-md border border-slate-300 bg-white px-2.5 text-sm placeholder-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:placeholder-slate-500`}
+          />
+        </div>
         <button
           type="button"
           className={`${ui.buttonPrimary} ${ui.controlH} shrink-0 self-end`}
@@ -199,9 +218,7 @@ export default function QuestionBankListClient() {
             type="button"
             className={`${ui.buttonDanger} ${ui.controlH} shrink-0 self-end`}
             disabled={loading || deleting}
-            onClick={() =>
-              setPendingDelete({ kind: "batch", ids: Array.from(selectedIds) })
-            }
+            onClick={() => setPendingDelete({ kind: "batch", ids: Array.from(selectedIds) })}
           >
             批量删除（{selectedCount}）
           </button>
@@ -384,10 +401,7 @@ export default function QuestionBankListClient() {
             </Pagination.Item>
             {pages.map((p) => (
               <Pagination.Item key={p}>
-                <Pagination.Link
-                  isActive={p === page}
-                  onPress={() => setOffset((p - 1) * limit)}
-                >
+                <Pagination.Link isActive={p === page} onPress={() => setOffset((p - 1) * limit)}>
                   {p}
                 </Pagination.Link>
               </Pagination.Item>

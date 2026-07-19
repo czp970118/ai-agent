@@ -13,8 +13,7 @@ function mapQuestionBankItem(raw: Record<string, unknown>): QuestionBankItem {
     explanation: String(raw.explanation ?? ""),
     extraTitle: raw.extraTitle != null ? String(raw.extraTitle) : undefined,
     extraText: raw.extraText != null ? String(raw.extraText) : undefined,
-    questionType:
-      raw.questionType != null ? String(raw.questionType) : undefined,
+    questionType: raw.questionType != null ? String(raw.questionType) : undefined,
     subjectDomain:
       raw.subjectDomain != null
         ? String(raw.subjectDomain)
@@ -262,6 +261,7 @@ export async function listQuestionBank(params?: {
   subjectDomain?: string;
   usage?: QuestionBankUsageFilter;
   tags?: string[];
+  keyword?: string;
   limit?: number;
   offset?: number;
 }): Promise<{
@@ -275,6 +275,7 @@ export async function listQuestionBank(params?: {
   if (params?.subjectDomain) q.set("subject_domain", params.subjectDomain);
   if (params?.usage && params.usage !== "all") q.set("usage", params.usage);
   if (params?.tags?.length) q.set("tags", params.tags.join(","));
+  if (params?.keyword) q.set("keyword", params.keyword);
   if (params?.limit != null) q.set("limit", String(params.limit));
   if (params?.offset != null) q.set("offset", String(params.offset));
   const suffix = q.toString() ? `?${q}` : "";
@@ -357,14 +358,11 @@ export async function patchImportItem(
   itemId: string,
   patch: Partial<QuestionImportItem>,
 ): Promise<QuestionImportItem> {
-  const data = await qbFetch<{ item: QuestionImportItem }>(
-    `/import/${importId}/items/${itemId}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    },
-  );
+  const data = await qbFetch<{ item: QuestionImportItem }>(`/import/${importId}/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
   return data.item;
 }
 
