@@ -51,7 +51,13 @@ export default function AccessGateClient() {
           typeof data.detail === "string"
             ? data.detail
             : Array.isArray(data.detail)
-              ? data.detail.map((x) => (typeof x === "object" && x && "msg" in x ? String((x as { msg: string }).msg) : "")).join("; ")
+              ? data.detail
+                  .map((x) =>
+                    typeof x === "object" && x && "msg" in x
+                      ? String((x as { msg: string }).msg)
+                      : "",
+                  )
+                  .join("; ")
               : "";
         setErrLocal(detail || data.error || `请求失败（${res.status}）`);
         return;
@@ -130,7 +136,10 @@ export default function AccessGateClient() {
           onSubmit={onSubmit}
           className="mt-8 space-y-4 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] backdrop-blur-sm"
         >
-          <label htmlFor="access-email" className="block text-xs font-medium uppercase tracking-wider text-slate-500">
+          <label
+            htmlFor="access-email"
+            className="block text-xs font-medium uppercase tracking-wider text-slate-500"
+          >
             工作邮箱
           </label>
           <input

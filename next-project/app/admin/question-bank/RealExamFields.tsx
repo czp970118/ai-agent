@@ -2,10 +2,7 @@
 
 import { adminFormStyles as ui } from "../components/formStyles";
 import CategorySelect from "./CategorySelect";
-import {
-  REAL_EXAM_KINDS,
-  realExamKindNeedsRegion,
-} from "./realExam";
+import { REAL_EXAM_KINDS, realExamKindNeedsRegion } from "./realExam";
 
 type RealExamFieldsProps = {
   examKind: string;
@@ -86,7 +83,10 @@ export default function RealExamFields({
     return (
       <div className="space-y-3">
         {kindSelect}
-        <div className="grid grid-cols-2 gap-3">{yearField}{regionField}</div>
+        <div className="grid grid-cols-2 gap-3">
+          {yearField}
+          {regionField}
+        </div>
       </div>
     );
   }

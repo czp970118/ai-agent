@@ -144,7 +144,9 @@ function LocalPicker({
                   <button
                     type="button"
                     className={`block w-full truncate px-3 py-2 text-left transition hover:bg-rose-50 dark:hover:bg-slate-700/80 ${
-                      selected ? "bg-rose-50/90 font-medium text-rose-900 dark:bg-slate-700 dark:text-rose-100" : ""
+                      selected
+                        ? "bg-rose-50/90 font-medium text-rose-900 dark:bg-slate-700 dark:text-rose-100"
+                        : ""
                     }`}
                     onClick={() => {
                       onChange(o.value);
@@ -288,9 +290,7 @@ function MaterialImageLightbox({
               type="button"
               onClick={() => onToggleSelect(image)}
               className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                selected
-                  ? "bg-white text-slate-900"
-                  : "bg-rose-600 text-white hover:bg-rose-500"
+                selected ? "bg-white text-slate-900" : "bg-rose-600 text-white hover:bg-rose-500"
               }`}
             >
               {selected ? "取消选用" : "选用此图"}
@@ -664,9 +664,7 @@ export default function DraftStreamCreation({
       });
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        setStreamText((prev) =>
-          prev.includes("已停止") ? prev : `${prev.trimEnd()}\n\n已停止。`,
-        );
+        setStreamText((prev) => (prev.includes("已停止") ? prev : `${prev.trimEnd()}\n\n已停止。`));
       } else {
         const msg = err instanceof Error ? err.message : "请求失败";
         setError(msg);
@@ -693,180 +691,182 @@ export default function DraftStreamCreation({
           <p className="mt-1 text-xs text-rose-800/80 dark:text-rose-200/80">
             {showMaterialPanel ? (
               <>
-                与 Ai-Agent 小红书同源 MCP；正文在文本框编辑，可随时调整垂类与模板后重新生成；宽屏下素材区与文案区各占约一半宽度，以素材创作为主。
+                与 Ai-Agent 小红书同源
+                MCP；正文在文本框编辑，可随时调整垂类与模板后重新生成；宽屏下素材区与文案区各占约一半宽度，以素材创作为主。
               </>
             ) : (
               <>
-                与 Ai-Agent 小红书同源 MCP；生成结束后会同步缓存帖子并在下方素材区展示配图；正文在文本框编辑，可随时重新生成。
+                与 Ai-Agent 小红书同源
+                MCP；生成结束后会同步缓存帖子并在下方素材区展示配图；正文在文本框编辑，可随时重新生成。
               </>
             )}
           </p>
           <form onSubmit={runStream} className="mt-3 flex flex-col gap-3">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <LocalPicker
-              label="写作垂类"
-              value={selectedDomain}
-              options={DOMAIN_OPTIONS.map((d) => ({ value: d, label: d }))}
-              onChange={setSelectedDomain}
-              disabled={loading}
-            />
-            <LocalPicker
-              label={
-                <span>
-                  提示词模板
-                  {loadingPrompts ? (
-                    <span className="text-slate-400">（加载中）</span>
-                  ) : null}
-                </span>
-              }
-              value={selectedPromptId}
-              options={currentDomainStyles.map((s) => ({ value: s.id, label: s.name }))}
-              onChange={setSelectedPromptId}
-              disabled={loading || !currentDomainStyles.length}
-              emptyPlaceholder="当前垂类暂无模板"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={oneLine}
-              onChange={(e) => setOneLine(e.target.value)}
-              placeholder="用一句话描述要写的小红书主题…"
-              disabled={loading}
-              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-rose-200/30 focus-visible:ring-2 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:ring-rose-500/20"
-            />
-            <button
-              type="submit"
-              disabled={loading || !oneLine.trim()}
-              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
-            >
-              生成
-            </button>
-            {loading ? (
-              <button
-                type="button"
-                onClick={stop}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-600"
-              >
-                停止
-              </button>
-            ) : null}
-          </div>
-        </form>
-        {error ? (
-          <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <div className="mt-6">
-          {showDraftToggle ? (
-            <div className="mb-2 flex flex-wrap items-center justify-start gap-2">
-              <div
-                className="flex rounded-lg border border-slate-200/90 bg-white/95 p-0.5 shadow-sm dark:border-slate-600 dark:bg-slate-900/95"
-                role="radiogroup"
-                aria-label="草稿或定稿"
-              >
-                {(["draft", "ready"] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    role="radio"
-                    aria-checked={draftStatus === s}
-                    onClick={() => onDraftStatusChange!(s)}
-                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-                      draftStatus === s
-                        ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                        : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-                    }`}
-                  >
-                    {STATUS_LABEL[s]}
-                  </button>
-                ))}
-              </div>
-              {draftStatus === "ready" ? (
-                <span className="rounded-md border border-amber-200/80 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100">
-                  审阅
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-          <textarea
-            value={textareaValue}
-            readOnly={textareaReadOnly || loading}
-            onChange={(e) => {
-              if (textareaReadOnly || loading) return;
-              if (isBodyControlled) onBodyChange!(e.target.value);
-              else setStreamText(e.target.value);
-            }}
-            rows={12}
-            placeholder="生成结果将显示在这里；也可直接撰写或粘贴文案。"
-            className={`min-h-[280px] w-full resize-y whitespace-pre-wrap rounded-lg border border-slate-200 bg-white/90 px-3 py-3 font-sans text-sm leading-relaxed text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-rose-300/80 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:focus-visible:ring-rose-500/40 ${
-              textareaReadOnly ? "cursor-default bg-slate-50/90 text-slate-700 dark:bg-slate-950/80 dark:text-slate-300" : ""
-            }`}
-            aria-label="正文"
-          />
-        </div>
-        {searchTerms.length > 0 ? (
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            检索词：{searchTerms.join("、")}
-          </p>
-        ) : null}
-        {selectedImages.length > 0 ? (
-          <section className="mt-3 rounded-lg border border-rose-200/80 bg-white/70 p-3 dark:border-rose-900/50 dark:bg-slate-900/40">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                已选配图（{selectedImages.length}）
-              </p>
-              <button
-                type="button"
-                onClick={() => setSelectedImages([])}
-                className="text-[11px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-              >
-                清空
-              </button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <LocalPicker
+                label="写作垂类"
+                value={selectedDomain}
+                options={DOMAIN_OPTIONS.map((d) => ({ value: d, label: d }))}
+                onChange={setSelectedDomain}
+                disabled={loading}
+              />
+              <LocalPicker
+                label={
+                  <span>
+                    提示词模板
+                    {loadingPrompts ? <span className="text-slate-400">（加载中）</span> : null}
+                  </span>
+                }
+                value={selectedPromptId}
+                options={currentDomainStyles.map((s) => ({ value: s.id, label: s.name }))}
+                onChange={setSelectedPromptId}
+                disabled={loading || !currentDomainStyles.length}
+                emptyPlaceholder="当前垂类暂无模板"
+              />
             </div>
             <div className="flex flex-wrap gap-2">
-              {selectedImages.map((img) => (
-                <div key={img.key} className="group relative shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewImage(img)}
-                    className="block overflow-hidden rounded-md border border-rose-200 shadow-sm outline-none ring-rose-300/50 focus-visible:ring-2 dark:border-rose-900/60"
-                    title="点击放大"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.displayUrl}
-                      alt=""
-                      className="h-20 w-20 object-cover sm:h-24 sm:w-24"
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="移除"
-                    onClick={() => removeSelectedImage(img.key)}
-                    className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white bg-slate-900 text-[10px] text-white opacity-90 hover:bg-slate-700"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+              <input
+                value={oneLine}
+                onChange={(e) => setOneLine(e.target.value)}
+                placeholder="用一句话描述要写的小红书主题…"
+                disabled={loading}
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-rose-200/30 focus-visible:ring-2 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:ring-rose-500/20"
+              />
+              <button
+                type="submit"
+                disabled={loading || !oneLine.trim()}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                生成
+              </button>
+              {loading ? (
+                <button
+                  type="button"
+                  onClick={stop}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-600"
+                >
+                  停止
+                </button>
+              ) : null}
             </div>
-          </section>
-        ) : null}
-        <CoverImageSection
-          workId={workId}
-          bodyText={textareaValue}
-          defaultTitleMain={
-            workTitle.trim() ||
-            oneLine.trim() ||
-            textareaValue.split("\n")[0]?.trim().slice(0, 24) ||
-            "小红书封面"
-          }
-          selectedImages={selectedImages}
-          cover={cover}
-          onCoverChange={onCoverChange}
-        />
-        {notesSlot ? <div className="mt-3">{notesSlot}</div> : null}
+          </form>
+          {error ? (
+            <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="mt-6">
+            {showDraftToggle ? (
+              <div className="mb-2 flex flex-wrap items-center justify-start gap-2">
+                <div
+                  className="flex rounded-lg border border-slate-200/90 bg-white/95 p-0.5 shadow-sm dark:border-slate-600 dark:bg-slate-900/95"
+                  role="radiogroup"
+                  aria-label="草稿或定稿"
+                >
+                  {(["draft", "ready"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      role="radio"
+                      aria-checked={draftStatus === s}
+                      onClick={() => onDraftStatusChange!(s)}
+                      className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                        draftStatus === s
+                          ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                          : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                      }`}
+                    >
+                      {STATUS_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+                {draftStatus === "ready" ? (
+                  <span className="rounded-md border border-amber-200/80 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100">
+                    审阅
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            <textarea
+              value={textareaValue}
+              readOnly={textareaReadOnly || loading}
+              onChange={(e) => {
+                if (textareaReadOnly || loading) return;
+                if (isBodyControlled) onBodyChange!(e.target.value);
+                else setStreamText(e.target.value);
+              }}
+              rows={12}
+              placeholder="生成结果将显示在这里；也可直接撰写或粘贴文案。"
+              className={`min-h-[280px] w-full resize-y whitespace-pre-wrap rounded-lg border border-slate-200 bg-white/90 px-3 py-3 font-sans text-sm leading-relaxed text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-rose-300/80 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:focus-visible:ring-rose-500/40 ${
+                textareaReadOnly
+                  ? "cursor-default bg-slate-50/90 text-slate-700 dark:bg-slate-950/80 dark:text-slate-300"
+                  : ""
+              }`}
+              aria-label="正文"
+            />
+          </div>
+          {searchTerms.length > 0 ? (
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              检索词：{searchTerms.join("、")}
+            </p>
+          ) : null}
+          {selectedImages.length > 0 ? (
+            <section className="mt-3 rounded-lg border border-rose-200/80 bg-white/70 p-3 dark:border-rose-900/50 dark:bg-slate-900/40">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  已选配图（{selectedImages.length}）
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedImages([])}
+                  className="text-[11px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  清空
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedImages.map((img) => (
+                  <div key={img.key} className="group relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage(img)}
+                      className="block overflow-hidden rounded-md border border-rose-200 shadow-sm outline-none ring-rose-300/50 focus-visible:ring-2 dark:border-rose-900/60"
+                      title="点击放大"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.displayUrl}
+                        alt=""
+                        className="h-20 w-20 object-cover sm:h-24 sm:w-24"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="移除"
+                      onClick={() => removeSelectedImage(img.key)}
+                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white bg-slate-900 text-[10px] text-white opacity-90 hover:bg-slate-700"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          <CoverImageSection
+            workId={workId}
+            bodyText={textareaValue}
+            defaultTitleMain={
+              workTitle.trim() ||
+              oneLine.trim() ||
+              textareaValue.split("\n")[0]?.trim().slice(0, 24) ||
+              "小红书封面"
+            }
+            selectedImages={selectedImages}
+            cover={cover}
+            onCoverChange={onCoverChange}
+          />
+          {notesSlot ? <div className="mt-3">{notesSlot}</div> : null}
         </div>
 
         {showMaterialPanel && !materialPanelOpen ? (
@@ -906,90 +906,95 @@ export default function DraftStreamCreation({
 
             {materialCache ? (
               <section className="mt-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-medium text-slate-700 dark:text-slate-300">缓存帖子配图</p>
-              {onLoadNextMaterialBatch && materialCache.notes.length > 0 ? (
-                <button
-                  type="button"
-                  disabled={materialCache.loading || !materialCache.hasMore}
-                  onClick={() => void onLoadNextMaterialBatch()}
-                  className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                  title={
-                    materialCache.hasMore
-                      ? "按相同检索条件加载下一批帖子"
-                      : "已是最后一批"
-                  }
-                >
-                  {materialCache.loading ? "加载中…" : "换一批"}
-                </button>
-              ) : null}
-              </div>
-              {materialCache.loading ? (
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">正在同步缓存列表…</p>
-              ) : (
-                <>
-                  {materialCache.hint ? (
-                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{materialCache.hint}</p>
-                  ) : materialCache.notes.length === 0 ? (
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      生成后将根据检索词与垂类拉取缓存并匹配参考链接。
-                    </p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    缓存帖子配图
+                  </p>
+                  {onLoadNextMaterialBatch && materialCache.notes.length > 0 ? (
+                    <button
+                      type="button"
+                      disabled={materialCache.loading || !materialCache.hasMore}
+                      onClick={() => void onLoadNextMaterialBatch()}
+                      className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      title={
+                        materialCache.hasMore ? "按相同检索条件加载下一批帖子" : "已是最后一批"
+                      }
+                    >
+                      {materialCache.loading ? "加载中…" : "换一批"}
+                    </button>
                   ) : null}
-                  {materialCache.notes.length > 0 ? (
-                    <ul className="mt-3 space-y-3">
-                      {materialCache.notes.map((n) => {
-                        const imgs = extractMaterialImageUrls(n.image_list);
-                        return (
-                          <li
-                            key={n.note_id}
-                            className="rounded-lg border border-slate-200/90 bg-white/80 p-2.5 dark:border-slate-700 dark:bg-slate-900/50"
-                          >
-                            <div className="flex min-w-0 items-start justify-between gap-2">
-                              <a
-                                href={n.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="min-w-0 flex-1 text-sm font-medium text-rose-800 underline-offset-2 hover:underline dark:text-rose-200"
-                              >
-                                {n.title || "（无标题）"}
-                              </a>
-                              <span className="shrink-0 font-mono text-[10px] text-slate-400 dark:text-slate-500">
-                                {n.note_id.slice(0, 8)}…
-                              </span>
-                            </div>
-                            {imgs.length > 0 ? (
-                              <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]">
-                                {imgs.slice(0, 18).map((src, idx) => (
-                                  <MaterialImageThumb
-                                    key={`${n.note_id}-${idx}`}
-                                    src={src}
-                                    noteId={n.note_id}
-                                    noteTitle={n.title || "（无标题）"}
-                                    noteUrl={n.url}
-                                    index={idx}
-                                    selected={selectedKeySet.has(materialImageKey(n.note_id, src, idx))}
-                                    onPreview={setPreviewImage}
-                                    onToggleSelect={toggleSelectedImage}
-                                  />
-                                ))}
+                </div>
+                {materialCache.loading ? (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    正在同步缓存列表…
+                  </p>
+                ) : (
+                  <>
+                    {materialCache.hint ? (
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                        {materialCache.hint}
+                      </p>
+                    ) : materialCache.notes.length === 0 ? (
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        生成后将根据检索词与垂类拉取缓存并匹配参考链接。
+                      </p>
+                    ) : null}
+                    {materialCache.notes.length > 0 ? (
+                      <ul className="mt-3 space-y-3">
+                        {materialCache.notes.map((n) => {
+                          const imgs = extractMaterialImageUrls(n.image_list);
+                          return (
+                            <li
+                              key={n.note_id}
+                              className="rounded-lg border border-slate-200/90 bg-white/80 p-2.5 dark:border-slate-700 dark:bg-slate-900/50"
+                            >
+                              <div className="flex min-w-0 items-start justify-between gap-2">
+                                <a
+                                  href={n.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="min-w-0 flex-1 text-sm font-medium text-rose-800 underline-offset-2 hover:underline dark:text-rose-200"
+                                >
+                                  {n.title || "（无标题）"}
+                                </a>
+                                <span className="shrink-0 font-mono text-[10px] text-slate-400 dark:text-slate-500">
+                                  {n.note_id.slice(0, 8)}…
+                                </span>
                               </div>
-                            ) : (
-                              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                                本条缓存暂无配图 URL，可点开标题在原文中查看。
-                              </p>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : null}
-                </>
-              )}
-            </section>
-          ) : null}
-
-        </aside>
-      ) : null}
+                              {imgs.length > 0 ? (
+                                <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]">
+                                  {imgs.slice(0, 18).map((src, idx) => (
+                                    <MaterialImageThumb
+                                      key={`${n.note_id}-${idx}`}
+                                      src={src}
+                                      noteId={n.note_id}
+                                      noteTitle={n.title || "（无标题）"}
+                                      noteUrl={n.url}
+                                      index={idx}
+                                      selected={selectedKeySet.has(
+                                        materialImageKey(n.note_id, src, idx),
+                                      )}
+                                      onPreview={setPreviewImage}
+                                      onToggleSelect={toggleSelectedImage}
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                  本条缓存暂无配图 URL，可点开标题在原文中查看。
+                                </p>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                  </>
+                )}
+              </section>
+            ) : null}
+          </aside>
+        ) : null}
       </div>
 
       {previewImage && lightboxImages.length > 0 ? (
@@ -1005,9 +1010,7 @@ export default function DraftStreamCreation({
 
       {resolvedFooter ? (
         <div className="border-t border-rose-200/60 bg-rose-50/30 px-4 py-4 dark:border-rose-900/40 dark:bg-rose-950/20">
-          <div className="flex w-full flex-col items-end gap-3 text-right">
-            {resolvedFooter}
-          </div>
+          <div className="flex w-full flex-col items-end gap-3 text-right">{resolvedFooter}</div>
         </div>
       ) : null}
     </div>

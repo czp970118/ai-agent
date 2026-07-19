@@ -120,13 +120,13 @@ export default function PromptsAdminClient() {
       const responses = await Promise.all(
         ALL_AGENTS.map((agentName) =>
           fetch(
-            `${getMcpBaseUrl()}/chat/prompt-library?agent=${encodeURIComponent(agentName)}&include_body=true`
+            `${getMcpBaseUrl()}/chat/prompt-library?agent=${encodeURIComponent(agentName)}&include_body=true`,
           ).then(async (res) => {
             if (!res.ok) throw new Error(await res.text());
             const data = (await res.json()) as { categories?: CategoryRow[] };
             return [agentName, Array.isArray(data.categories) ? data.categories : []] as const;
-          })
-        )
+          }),
+        ),
       );
       setCategoriesByAgent({
         xiaohongshu: responses.find((item) => item[0] === "xiaohongshu")?.[1] ?? [],
@@ -170,7 +170,12 @@ export default function PromptsAdminClient() {
     const typeTerm = filters.type.trim().toLowerCase();
     const agentTerm = filters.agent.trim().toLowerCase();
     return promptRows.filter((row) => {
-      if (nameTerm && !row.name.toLowerCase().includes(nameTerm) && !row.content.toLowerCase().includes(nameTerm)) return false;
+      if (
+        nameTerm &&
+        !row.name.toLowerCase().includes(nameTerm) &&
+        !row.content.toLowerCase().includes(nameTerm)
+      )
+        return false;
       if (typeTerm && !row.type.toLowerCase().includes(typeTerm)) return false;
       if (agentTerm && !row.agent.toLowerCase().includes(agentTerm)) return false;
       return true;
@@ -190,9 +195,12 @@ export default function PromptsAdminClient() {
 
   async function deleteStyle(row: PromptRow) {
     if (!window.confirm("确定删除该提示词吗？")) return;
-    const res = await fetch(`${getMcpBaseUrl()}/chat/prompt-library/styles/${encodeURIComponent(row.styleId)}`, {
-      method: "DELETE",
-    });
+    const res = await fetch(
+      `${getMcpBaseUrl()}/chat/prompt-library/styles/${encodeURIComponent(row.styleId)}`,
+      {
+        method: "DELETE",
+      },
+    );
     if (!res.ok) {
       setError(await res.text());
       return;
@@ -214,18 +222,22 @@ export default function PromptsAdminClient() {
 
       const moved = targetAgent !== selectedRow.agent || targetType !== selectedRow.type;
       if (!moved) {
-        const res = await fetch(`${getMcpBaseUrl()}/chat/prompt-library/styles/${encodeURIComponent(selectedRow.styleId)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: targetStyle,
-            body: editBody,
-            is_default: editIsDefault,
-          }),
-        });
+        const res = await fetch(
+          `${getMcpBaseUrl()}/chat/prompt-library/styles/${encodeURIComponent(selectedRow.styleId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: targetStyle,
+              body: editBody,
+              is_default: editIsDefault,
+            }),
+          },
+        );
         if (!res.ok) throw new Error(await res.text());
       } else {
-        let targetCategoryId = categoriesByAgent[targetAgent].find((item) => item.name.trim() === targetType)?.id ?? "";
+        let targetCategoryId =
+          categoriesByAgent[targetAgent].find((item) => item.name.trim() === targetType)?.id ?? "";
         if (!targetCategoryId) {
           const categoryRes = await fetch(`${getMcpBaseUrl()}/chat/prompt-library/categories`, {
             method: "POST",
@@ -253,9 +265,12 @@ export default function PromptsAdminClient() {
         });
         if (!createRes.ok) throw new Error(await createRes.text());
 
-        const deleteRes = await fetch(`${getMcpBaseUrl()}/chat/prompt-library/styles/${encodeURIComponent(selectedRow.styleId)}`, {
-          method: "DELETE",
-        });
+        const deleteRes = await fetch(
+          `${getMcpBaseUrl()}/chat/prompt-library/styles/${encodeURIComponent(selectedRow.styleId)}`,
+          {
+            method: "DELETE",
+          },
+        );
         if (!deleteRes.ok) throw new Error(await deleteRes.text());
       }
       await loadData();
@@ -295,7 +310,8 @@ export default function PromptsAdminClient() {
     setCreating(true);
     setError("");
     try {
-      let categoryId = categoriesByAgent[createAgent].find((item) => item.name.trim() === domain)?.id ?? "";
+      let categoryId =
+        categoriesByAgent[createAgent].find((item) => item.name.trim() === domain)?.id ?? "";
       if (!categoryId) {
         const categoryRes = await fetch(`${getMcpBaseUrl()}/chat/prompt-library/categories`, {
           method: "POST",
@@ -337,7 +353,9 @@ export default function PromptsAdminClient() {
       <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-950/30">
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">名称检索</span>
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+              名称检索
+            </span>
             <input
               className={`${ui.input} w-[260px]`}
               value={filters.name}
@@ -346,7 +364,9 @@ export default function PromptsAdminClient() {
             />
           </label>
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">类型检索</span>
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+              类型检索
+            </span>
             <input
               className={`${ui.input} w-[220px]`}
               value={filters.type}
@@ -355,7 +375,9 @@ export default function PromptsAdminClient() {
             />
           </label>
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">Agent检索</span>
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+              Agent检索
+            </span>
             <input
               className={`${ui.input} w-[180px]`}
               value={filters.agent}
@@ -399,7 +421,7 @@ export default function PromptsAdminClient() {
                       <TagGroup className="inline-flex w-fit gap-1">
                         <span
                           className={`inline-flex w-fit whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] ${agentTagColor(
-                            row.agent
+                            row.agent,
                           )}`}
                         >
                           {row.agent}
@@ -410,7 +432,7 @@ export default function PromptsAdminClient() {
                       <TagGroup className="inline-flex w-fit gap-1">
                         <span
                           className={`inline-flex w-fit whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] ${colorByText(
-                            row.type
+                            row.type,
                           )}`}
                         >
                           {row.type}
@@ -483,7 +505,10 @@ export default function PromptsAdminClient() {
               </Pagination.Summary>
               <Pagination.Content>
                 <Pagination.Item>
-                  <Pagination.Previous isDisabled={page === 1} onPress={() => setPage((prev) => Math.max(1, prev - 1))}>
+                  <Pagination.Previous
+                    isDisabled={page === 1}
+                    onPress={() => setPage((prev) => Math.max(1, prev - 1))}
+                  >
                     <Pagination.PreviousIcon />
                     上一页
                   </Pagination.Previous>
@@ -513,7 +538,9 @@ export default function PromptsAdminClient() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
           <div className="w-full max-w-4xl rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-3 flex items-center justify-between">
-              <p className={ui.sectionTitle}>{detailMode === "view" ? "提示词详情" : "编辑提示词"}</p>
+              <p className={ui.sectionTitle}>
+                {detailMode === "view" ? "提示词详情" : "编辑提示词"}
+              </p>
               <button className={ui.buttonSecondary} onClick={() => setSelectedRow(null)}>
                 关闭
               </button>
@@ -532,7 +559,9 @@ export default function PromptsAdminClient() {
                 </span>
               </label>
               <label className="grid gap-1 text-sm text-slate-700 dark:text-slate-200">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Agent</span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Agent
+                </span>
                 {detailMode === "view" ? (
                   <input className={ui.input} value={editAgent} disabled />
                 ) : (
@@ -584,7 +613,11 @@ export default function PromptsAdminClient() {
               </label>
               {detailMode === "edit" ? (
                 <div className="ml-auto">
-                  <button className={ui.buttonPrimary} onClick={() => void saveStyleEdit()} disabled={saving}>
+                  <button
+                    className={ui.buttonPrimary}
+                    onClick={() => void saveStyleEdit()}
+                    disabled={saving}
+                  >
                     {saving ? "保存中..." : "保存修改"}
                   </button>
                 </div>
@@ -598,7 +631,11 @@ export default function PromptsAdminClient() {
           <div className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-3 flex items-center justify-between">
               <p className={ui.sectionTitle}>创建提示词</p>
-              <button className={ui.buttonSecondary} type="button" onClick={() => setCreateOpen(false)}>
+              <button
+                className={ui.buttonSecondary}
+                type="button"
+                onClick={() => setCreateOpen(false)}
+              >
                 关闭
               </button>
             </div>
@@ -615,7 +652,9 @@ export default function PromptsAdminClient() {
                 </span>
               </label>
               <label className="grid gap-1 text-sm text-slate-700 dark:text-slate-200">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">1. 名称</span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  1. 名称
+                </span>
                 <input
                   className={ui.input}
                   value={createStyle}
@@ -624,7 +663,9 @@ export default function PromptsAdminClient() {
                 />
               </label>
               <label className="grid gap-1 text-sm text-slate-700 dark:text-slate-200">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">2. 选择 Agent</span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  2. 选择 Agent
+                </span>
                 <Select
                   aria-label="选择 Agent"
                   variant="secondary"
@@ -645,7 +686,9 @@ export default function PromptsAdminClient() {
               </label>
 
               <label className="grid gap-1 text-sm text-slate-700 dark:text-slate-200">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">3. 选择领域</span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  3. 选择领域
+                </span>
                 <Select
                   aria-label="选择领域"
                   variant="secondary"
@@ -669,7 +712,9 @@ export default function PromptsAdminClient() {
               </label>
               {createDomain === "自定义" ? (
                 <label className="grid gap-1 text-sm text-slate-700 dark:text-slate-200">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">自定义领域</span>
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    自定义领域
+                  </span>
                   <input
                     className={ui.input}
                     value={createCustomDomain}
@@ -686,7 +731,9 @@ export default function PromptsAdminClient() {
                 </p>
               ) : null}
               <label className="grid gap-1 text-sm text-slate-700 dark:text-slate-200">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">4. 输入提示词（Markdown）</span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  4. 输入提示词（Markdown）
+                </span>
                 <textarea
                   className={`min-h-[280px] font-mono ${ui.textarea}`}
                   value={createBody}
@@ -700,10 +747,19 @@ export default function PromptsAdminClient() {
               </label>
 
               <div className="ml-auto flex items-center gap-2">
-                <button className={ui.buttonSecondary} type="button" onClick={() => setCreateOpen(false)}>
+                <button
+                  className={ui.buttonSecondary}
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                >
                   取消
                 </button>
-                <button className={ui.buttonPrimary} type="button" onClick={() => void submitCreatePrompt()} disabled={creating}>
+                <button
+                  className={ui.buttonPrimary}
+                  type="button"
+                  onClick={() => void submitCreatePrompt()}
+                  disabled={creating}
+                >
                   {creating ? "创建中..." : "创建提示词"}
                 </button>
               </div>
@@ -711,7 +767,9 @@ export default function PromptsAdminClient() {
           </div>
         </div>
       ) : null}
-      {loading ? <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">加载中...</p> : null}
+      {loading ? (
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">加载中...</p>
+      ) : null}
       {error ? <p className={ui.error}>{error}</p> : null}
     </section>
   );

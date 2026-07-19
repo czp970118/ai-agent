@@ -24,25 +24,21 @@ export function quizQuestionCardHeader(header: string): string {
 
 /** 题目卡题干：真题时在题干前加（年份+地区+考试类型） */
 export function quizQuestionCardStem(
-  q: Pick<
-    QuestionBankItem,
-    "stem" | "isRealExam" | "examYear" | "examRegion" | "examKind"
-  >,
+  q: Pick<QuestionBankItem, "stem" | "isRealExam" | "examYear" | "examRegion" | "examKind">,
 ): string {
   const stem = String(q.stem || "").trim();
   if (q.isRealExam && q.examKind) {
-    const exam = formatRealExamSummary(
-      q.examYear ?? "",
-      q.examRegion ?? "",
-      q.examKind,
-    );
+    const exam = formatRealExamSummary(q.examYear ?? "", q.examRegion ?? "", q.examKind);
     if (exam) return `（${exam}）${stem}`;
   }
   return stem;
 }
 
 export function optionsToText(options: string[]): string {
-  return options.map((o) => String(o || "").trim()).filter(Boolean).join("\n");
+  return options
+    .map((o) => String(o || "").trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** 答案卡展示行，如「A. 新西兰」 */

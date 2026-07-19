@@ -37,19 +37,15 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
 
-  const normalizedTags = useMemo(
-    () =>
-      tags
-        .map((item) => item.trim())
-        .filter(Boolean),
-    [tags]
-  );
+  const normalizedTags = useMemo(() => tags.map((item) => item.trim()).filter(Boolean), [tags]);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(noteId)}`);
+      const res = await fetch(
+        `${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(noteId)}`,
+      );
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as { item?: NoteDetail };
       if (!data.item) throw new Error("帖子不存在");
@@ -73,11 +69,18 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
     setSaving(true);
     setError("");
     try {
-      const res = await fetch(`${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(noteId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), content_text: content.trim(), tags: normalizedTags }),
-      });
+      const res = await fetch(
+        `${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(noteId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim(),
+            content_text: content.trim(),
+            tags: normalizedTags,
+          }),
+        },
+      );
       if (!res.ok) throw new Error(await res.text());
       await loadDetail();
     } catch (e) {
@@ -101,7 +104,11 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
   return (
     <section className={ui.page}>
       <div className="mb-4">
-        <button className={ui.buttonSecondary} type="button" onClick={() => router.push("/admin/xiaohongshu-posts")}>
+        <button
+          className={ui.buttonSecondary}
+          type="button"
+          onClick={() => router.push("/admin/xiaohongshu-posts")}
+        >
           返回列表
         </button>
       </div>
@@ -120,8 +127,12 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
               <div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{readonly ? "帖子详情" : "编辑帖子"}</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">仅标题、正文、标签可编辑</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {readonly ? "帖子详情" : "编辑帖子"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  仅标题、正文、标签可编辑
+                </p>
               </div>
               <div className="flex gap-2" aria-label="统计信息">
                 <span className="inline-flex whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -135,13 +146,17 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
             <div className="grid gap-5 p-5">
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <label className="grid gap-1.5">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">帖子 ID（只读）</span>
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    帖子 ID（只读）
+                  </span>
                   <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                     {note.note_id}
                   </p>
                 </label>
                 <label className="grid gap-1.5">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">链接（只读）</span>
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    链接（只读）
+                  </span>
                   <a
                     href={note.url}
                     target="_blank"
@@ -228,7 +243,11 @@ export default function XhsPostDetailClient({ noteId }: { noteId: string }) {
 
           {!readonly ? (
             <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-              <button className={ui.buttonSecondary} type="button" onClick={() => router.push("/admin/xiaohongshu-posts")}>
+              <button
+                className={ui.buttonSecondary}
+                type="button"
+                onClick={() => router.push("/admin/xiaohongshu-posts")}
+              >
                 取消
               </button>
               <button className={ui.buttonPrimary} type="submit" disabled={saving}>

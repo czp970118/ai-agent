@@ -1,9 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import {
-  ACCESS_GATE_COOKIE,
-  isAccessGateEnabled,
-  verifyAccessJwt,
-} from "@/lib/accessGate";
+import { ACCESS_GATE_COOKIE, isAccessGateEnabled, verifyAccessJwt } from "@/lib/accessGate";
 
 export async function middleware(request: NextRequest) {
   if (!isAccessGateEnabled()) {

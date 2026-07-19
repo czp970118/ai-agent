@@ -5,15 +5,8 @@ import { adminFormStyles as ui } from "../components/formStyles";
 import CategorySelect from "./CategorySelect";
 import RealExamFields from "./RealExamFields";
 import TagInput from "./TagInput";
-import {
-  patchQuestionBank,
-  type QuestionBankItem,
-} from "./questionBankClient";
-import {
-  formatRealExamSummary,
-  realExamKindNeedsRegion,
-  realExamKindsLabel,
-} from "./realExam";
+import { patchQuestionBank, type QuestionBankItem } from "./questionBankClient";
+import { formatRealExamSummary, realExamKindNeedsRegion, realExamKindsLabel } from "./realExam";
 
 const CATEGORIES = ["公基", "行测", "时政", "面试", "未分类"];
 
@@ -123,7 +116,12 @@ export default function QuestionBankEditDialog({
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700">
           <p className={ui.sectionTitle}>编辑题目</p>
-          <button type="button" className={ui.buttonSecondary} disabled={saving || busy} onClick={onClose}>
+          <button
+            type="button"
+            className={ui.buttonSecondary}
+            disabled={saving || busy}
+            onClick={onClose}
+          >
             关闭
           </button>
         </div>
@@ -196,12 +194,7 @@ export default function QuestionBankEditDialog({
               onChange={(e) => setExplanation(e.target.value)}
             />
           </label>
-          <TagInput
-            label="标签"
-            tags={tags}
-            disabled={saving}
-            onChange={setTags}
-          />
+          <TagInput label="标签" tags={tags} disabled={saving} onChange={setTags} />
           <div className={`${ui.panel} space-y-3`}>
             <p className={ui.sectionTitle}>真题配置</p>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">

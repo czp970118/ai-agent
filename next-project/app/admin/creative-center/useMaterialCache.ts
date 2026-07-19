@@ -54,13 +54,16 @@ export function useMaterialCache() {
     });
   }, []);
 
-  const fetchLinkedNotes = useCallback(async (payload: StreamSuccessPayload) => {
-    const query = queryFromPayload(payload);
-    queryRef.current = query;
-    referencesRef.current = payload.references;
-    pageRef.current = 0;
-    await loadPage(query, 0);
-  }, [loadPage]);
+  const fetchLinkedNotes = useCallback(
+    async (payload: StreamSuccessPayload) => {
+      const query = queryFromPayload(payload);
+      queryRef.current = query;
+      referencesRef.current = payload.references;
+      pageRef.current = 0;
+      await loadPage(query, 0);
+    },
+    [loadPage],
+  );
 
   const loadNextMaterialBatch = useCallback(async () => {
     const query = queryRef.current;

@@ -3,8 +3,7 @@
 import { useRef } from "react";
 import { adminFormStyles as ui } from "../components/formStyles";
 
-const DOCX_ACCEPT =
-  ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const DOCX_ACCEPT = ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 type ImportFileFieldProps = {
   label: string;
@@ -97,7 +96,9 @@ export default function ImportFileField({
             选择文件
           </button>
           <span className={ui.hint}>
-            {files.length ? `已选 ${files.length} 个文件，可继续添加` : "支持多选 .docx，按选择顺序合并"}
+            {files.length
+              ? `已选 ${files.length} 个文件，可继续添加`
+              : "支持多选 .docx，按选择顺序合并"}
           </span>
         </div>
 
@@ -110,7 +111,10 @@ export default function ImportFileField({
               >
                 <span className={`${ui.badge} shrink-0 tabular-nums`}>{index + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-slate-800 dark:text-slate-100" title={file.name}>
+                  <p
+                    className="truncate text-sm text-slate-800 dark:text-slate-100"
+                    title={file.name}
+                  >
                     {file.name}
                   </p>
                   <p className={ui.hint}>{formatFileSize(file.size)}</p>

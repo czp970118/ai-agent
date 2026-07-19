@@ -3,11 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import {
-  CreativeWork,
-  listWorks,
-  PLATFORM_META,
-} from "./workStorage";
+import { CreativeWork, listWorks, PLATFORM_META } from "./workStorage";
 
 function formatRelative(ts: number) {
   const d = Date.now() - ts;
@@ -49,9 +45,7 @@ export default function CreativeCenterHubClient() {
   }, [refresh]);
 
   if (!hydrated) {
-    return (
-      <div className="text-sm text-slate-500 dark:text-slate-400">加载中…</div>
-    );
+    return <div className="text-sm text-slate-500 dark:text-slate-400">加载中…</div>;
   }
 
   return (

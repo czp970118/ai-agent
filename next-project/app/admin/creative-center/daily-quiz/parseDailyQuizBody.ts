@@ -12,8 +12,7 @@ export type ParsedDailyQuizBody = {
   slots: ParsedDailyQuizSlot[];
 };
 
-const SLOT_QID_RE =
-  /-slot-(\d+)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+const SLOT_QID_RE = /-slot-(\d+)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
 export function isDailyQuizWork(work: {
   coverSource?: string;

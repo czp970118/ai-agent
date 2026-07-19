@@ -149,7 +149,15 @@ export default function XhsPostsAdminClient() {
     } finally {
       setLoading(false);
     }
-  }, [filters.cityName, filters.domains, filters.keyword, filters.sortBy, filters.tag, limit, offset]);
+  }, [
+    filters.cityName,
+    filters.domains,
+    filters.keyword,
+    filters.sortBy,
+    filters.tag,
+    limit,
+    offset,
+  ]);
 
   useEffect(() => {
     void loadNotes();
@@ -177,7 +185,9 @@ export default function XhsPostsAdminClient() {
 
   async function deleteNote(noteId: string) {
     if (!window.confirm("确定删除该帖子吗？")) return;
-    const res = await fetch(`${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(noteId)}`, { method: "DELETE" });
+    const res = await fetch(`${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(noteId)}`, {
+      method: "DELETE",
+    });
     if (!res.ok) {
       setError(await res.text());
       return;
@@ -218,18 +228,21 @@ export default function XhsPostsAdminClient() {
     try {
       const cleanedTags = editTags.map((item) => item.trim()).filter(Boolean);
       const cleanedDomains = editDomains.map((item) => item.trim()).filter(Boolean);
-      const res = await fetch(`${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(activeNote.note_id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: editTitle.trim(),
-          content_text: editContent.trim(),
-          tags: cleanedTags,
-          domains: cleanedDomains,
-          city_name: editCityName.trim(),
-          image_list: editImages,
-        }),
-      });
+      const res = await fetch(
+        `${getMcpBaseUrl()}/search/cache/notes/${encodeURIComponent(activeNote.note_id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: editTitle.trim(),
+            content_text: editContent.trim(),
+            tags: cleanedTags,
+            domains: cleanedDomains,
+            city_name: editCityName.trim(),
+            image_list: editImages,
+          }),
+        },
+      );
       if (!res.ok) throw new Error(await res.text());
       await loadNotes();
       setDialogOpen(false);
@@ -265,7 +278,9 @@ export default function XhsPostsAdminClient() {
       >
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">领域</span>
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+              领域
+            </span>
             <div className="relative" ref={domainFilterRef}>
               <button
                 type="button"
@@ -324,7 +339,9 @@ export default function XhsPostsAdminClient() {
             </div>
           </label>
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">城市</span>
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+              城市
+            </span>
             <input
               className={`${ui.input} w-[160px]`}
               placeholder="如：中山、深圳"
@@ -333,7 +350,9 @@ export default function XhsPostsAdminClient() {
             />
           </label>
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">内容或标题</span>
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+              内容或标题
+            </span>
             <input
               className={`${ui.input} w-[260px]`}
               placeholder="输入关键词"
@@ -342,7 +361,9 @@ export default function XhsPostsAdminClient() {
             />
           </label>
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">标签</span>
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+              标签
+            </span>
             <input
               className={`${ui.input} w-[260px]`}
               placeholder="广州旅游"
@@ -351,7 +372,9 @@ export default function XhsPostsAdminClient() {
             />
           </label>
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">原帖数据排序</span>
+            <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+              原帖数据排序
+            </span>
             <div className="relative" ref={sortFilterRef}>
               <button
                 type="button"
@@ -486,7 +509,9 @@ export default function XhsPostsAdminClient() {
                       <span className="text-xs text-slate-600">{n.used_count}</span>
                     </Table.Cell>
                     <Table.Cell>
-                      <span className="whitespace-nowrap text-xs text-slate-600">{formatDateDay(n.updated_at)}</span>
+                      <span className="whitespace-nowrap text-xs text-slate-600">
+                        {formatDateDay(n.updated_at)}
+                      </span>
                     </Table.Cell>
                     <Table.Cell>
                       <div className="flex items-center gap-2 whitespace-nowrap">
@@ -496,7 +521,10 @@ export default function XhsPostsAdminClient() {
                         >
                           修改
                         </button>
-                        <button className={ui.buttonDanger} onClick={() => void deleteNote(n.note_id)}>
+                        <button
+                          className={ui.buttonDanger}
+                          onClick={() => void deleteNote(n.note_id)}
+                        >
                           删除
                         </button>
                         <button
@@ -529,7 +557,10 @@ export default function XhsPostsAdminClient() {
                 </Pagination.Item>
                 {pages.map((p) => (
                   <Pagination.Item key={p}>
-                    <Pagination.Link isActive={p === page} onPress={() => setOffset((p - 1) * limit)}>
+                    <Pagination.Link
+                      isActive={p === page}
+                      onPress={() => setOffset((p - 1) * limit)}
+                    >
                       {p}
                     </Pagination.Link>
                   </Pagination.Item>
@@ -570,7 +601,9 @@ export default function XhsPostsAdminClient() {
                   {Array.isArray(activeNote.image_list) && activeNote.image_list.length ? (
                     <div className="flex h-full flex-col">
                       <img
-                        src={toProxyImageUrl(activeNote.image_list[activeImageIndex] || activeNote.image_list[0])}
+                        src={toProxyImageUrl(
+                          activeNote.image_list[activeImageIndex] || activeNote.image_list[0],
+                        )}
                         alt={`${activeNote.title || activeNote.note_id}-image-${activeImageIndex + 1}`}
                         className="h-[470px] w-full max-w-full cursor-zoom-in rounded-lg object-cover"
                         loading="lazy"
@@ -590,11 +623,18 @@ export default function XhsPostsAdminClient() {
                                 }`}
                                 onClick={() => setActiveImageIndex(index)}
                               >
-                                <img src={toProxyImageUrl(src)} alt={`thumb-${index + 1}`} className="h-14 w-full object-cover" loading="lazy" />
+                                <img
+                                  src={toProxyImageUrl(src)}
+                                  alt={`thumb-${index + 1}`}
+                                  className="h-14 w-full object-cover"
+                                  loading="lazy"
+                                />
                               </button>
                             ))}
                           </div>
-                          <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">← 横向滑动查看更多图片 →</p>
+                          <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                            ← 横向滑动查看更多图片 →
+                          </p>
                         </div>
                       ) : null}
                     </div>
@@ -606,7 +646,9 @@ export default function XhsPostsAdminClient() {
                 </div>
                 <div className="min-w-0 flex h-[560px] flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
                   <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-                    <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{activeNote.title || activeNote.note_id}</p>
+                    <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                      {activeNote.title || activeNote.note_id}
+                    </p>
                     <a
                       href={activeNote.url}
                       target="_blank"
@@ -624,7 +666,9 @@ export default function XhsPostsAdminClient() {
                   </div>
                   <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-700">
                     <div className="mb-2">
-                      <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">标签</p>
+                      <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        标签
+                      </p>
                       <div className="flex flex-wrap gap-1.5">
                         {(activeNote.tags ?? []).length ? (
                           (activeNote.tags ?? []).map((item) => (
@@ -636,12 +680,16 @@ export default function XhsPostsAdminClient() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-400 dark:text-slate-500">暂无标签</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            暂无标签
+                          </span>
                         )}
                       </div>
                     </div>
                     <div className="mb-3">
-                      <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">领域</p>
+                      <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        领域
+                      </p>
                       <div className="flex flex-wrap gap-1.5">
                         {(activeNote.domains ?? []).length ? (
                           (activeNote.domains ?? []).map((item) => (
@@ -653,7 +701,9 @@ export default function XhsPostsAdminClient() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-400 dark:text-slate-500">未设置领域</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            未设置领域
+                          </span>
                         )}
                       </div>
                     </div>
@@ -687,34 +737,46 @@ export default function XhsPostsAdminClient() {
                       />
                       <div className="mt-2">
                         <div className="no-scrollbar w-full max-w-full flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-md border border-slate-200 bg-white/80 p-1 dark:border-slate-700 dark:bg-slate-900/70">
-                        {editImages.map((src, index) => (
-                          <div key={`${activeNote.note_id}-edit-thumb-${index}`} className="relative">
-                            <button
-                              type="button"
-                              className={`w-16 shrink-0 snap-start overflow-hidden rounded-md border ${
-                                activeImageIndex === index
-                                  ? "border-sky-400 ring-1 ring-sky-300"
-                                  : "border-slate-200 dark:border-slate-700"
-                              }`}
-                              onClick={() => setActiveImageIndex(index)}
+                          {editImages.map((src, index) => (
+                            <div
+                              key={`${activeNote.note_id}-edit-thumb-${index}`}
+                              className="relative"
                             >
-                              <img src={toProxyImageUrl(src)} alt={`edit-thumb-${index + 1}`} className="h-14 w-full object-cover" loading="lazy" />
-                            </button>
-                            <button
-                              type="button"
-                              className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-rose-500"
-                              onClick={() => {
-                                setEditImages((prev) => prev.filter((_, i) => i !== index));
-                                setActiveImageIndex((prev) => (prev > 0 && prev >= index ? prev - 1 : prev));
-                              }}
-                              aria-label="删除图片"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
+                              <button
+                                type="button"
+                                className={`w-16 shrink-0 snap-start overflow-hidden rounded-md border ${
+                                  activeImageIndex === index
+                                    ? "border-sky-400 ring-1 ring-sky-300"
+                                    : "border-slate-200 dark:border-slate-700"
+                                }`}
+                                onClick={() => setActiveImageIndex(index)}
+                              >
+                                <img
+                                  src={toProxyImageUrl(src)}
+                                  alt={`edit-thumb-${index + 1}`}
+                                  className="h-14 w-full object-cover"
+                                  loading="lazy"
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-rose-500"
+                                onClick={() => {
+                                  setEditImages((prev) => prev.filter((_, i) => i !== index));
+                                  setActiveImageIndex((prev) =>
+                                    prev > 0 && prev >= index ? prev - 1 : prev,
+                                  );
+                                }}
+                                aria-label="删除图片"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                        <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">← 横向滑动查看更多图片 →</p>
+                        <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                          ← 横向滑动查看更多图片 →
+                        </p>
                       </div>
                     </>
                   ) : (
@@ -726,11 +788,19 @@ export default function XhsPostsAdminClient() {
                 <div className="min-w-0 flex h-[560px] flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
                   <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
                     <label className="grid gap-1.5">
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">标题</span>
-                      <input className={ui.input} value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        标题
+                      </span>
+                      <input
+                        className={ui.input}
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                      />
                     </label>
                     <label className="grid gap-1.5">
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">正文</span>
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        正文
+                      </span>
                       <textarea
                         className={`min-h-[220px] ${ui.textarea}`}
                         value={editContent}
@@ -738,7 +808,9 @@ export default function XhsPostsAdminClient() {
                       />
                     </label>
                     <label className="grid gap-1.5">
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">城市</span>
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        城市
+                      </span>
                       <input
                         className={ui.input}
                         value={editCityName}
@@ -747,7 +819,9 @@ export default function XhsPostsAdminClient() {
                       />
                     </label>
                     <div>
-                      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">领域（可多选）</p>
+                      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        领域（可多选）
+                      </p>
                       <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
                         <div className="flex flex-wrap gap-2">
                           {DOMAIN_OPTIONS.map((domain) => {
@@ -767,7 +841,9 @@ export default function XhsPostsAdminClient() {
                                   checked={checked}
                                   onChange={(e) =>
                                     setEditDomains((prev) =>
-                                      e.target.checked ? [...prev, domain] : prev.filter((item) => item !== domain)
+                                      e.target.checked
+                                        ? [...prev, domain]
+                                        : prev.filter((item) => item !== domain),
                                     )
                                   }
                                 />
@@ -779,7 +855,9 @@ export default function XhsPostsAdminClient() {
                       </div>
                     </div>
                     <div>
-                      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">标签（可多选）</p>
+                      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        标签（可多选）
+                      </p>
                       <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
                         {editTags.length ? (
                           <div className="mb-3 flex flex-wrap gap-2">
@@ -834,7 +912,12 @@ export default function XhsPostsAdminClient() {
                   >
                     取消
                   </button>
-                  <button className={ui.buttonPrimary} type="button" onClick={() => void saveNote()} disabled={saving}>
+                  <button
+                    className={ui.buttonPrimary}
+                    type="button"
+                    onClick={() => void saveNote()}
+                    disabled={saving}
+                  >
                     {saving ? "保存中..." : "保存修改"}
                   </button>
                 </div>
@@ -842,7 +925,10 @@ export default function XhsPostsAdminClient() {
             )}
           </div>
           {imagePreviewOpen ? (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4" onClick={() => setImagePreviewOpen(false)}>
+            <div
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
+              onClick={() => setImagePreviewOpen(false)}
+            >
               <button
                 type="button"
                 className="absolute right-4 top-4 rounded-full bg-white/15 px-3 py-1 text-sm text-white hover:bg-white/25"
@@ -854,7 +940,7 @@ export default function XhsPostsAdminClient() {
                 src={toProxyImageUrl(
                   dialogMode === "edit"
                     ? editImages[activeImageIndex] || editImages[0] || ""
-                    : activeNote.image_list?.[activeImageIndex] || activeNote.image_list?.[0] || ""
+                    : activeNote.image_list?.[activeImageIndex] || activeNote.image_list?.[0] || "",
                 )}
                 alt="图片整屏预览"
                 className="max-h-[95vh] max-w-[95vw] rounded-lg object-contain"
@@ -864,7 +950,9 @@ export default function XhsPostsAdminClient() {
           ) : null}
         </div>
       ) : null}
-      {loading ? <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">加载中...</p> : null}
+      {loading ? (
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">加载中...</p>
+      ) : null}
       {error ? <p className={ui.error}>{error}</p> : null}
     </section>
   );

@@ -57,7 +57,9 @@ export function normalizeSearchMeta(data: unknown): MessageSearchMeta | undefine
         .slice(0, 8)
     : [];
   return {
-    queryCount: Number.isFinite(queryCount) ? Math.max(0, Math.trunc(queryCount)) : queryTerms.length,
+    queryCount: Number.isFinite(queryCount)
+      ? Math.max(0, Math.trunc(queryCount))
+      : queryTerms.length,
     queryTerms,
   };
 }
@@ -70,9 +72,7 @@ export type StreamXhsOptions = {
   onDelta: (fullText: string) => void;
 };
 
-export async function streamXhsPostGeneration(
-  opts: StreamXhsOptions,
-): Promise<{
+export async function streamXhsPostGeneration(opts: StreamXhsOptions): Promise<{
   content: string;
   references: MessageReference[];
   searchMeta?: MessageSearchMeta;
@@ -145,9 +145,7 @@ export async function streamXhsPostGeneration(
               ? String((evt.data as { content: string }).content)
               : "";
           const endRefs =
-            typeof evt.data === "object" &&
-            evt.data &&
-            "references" in evt.data
+            typeof evt.data === "object" && evt.data && "references" in evt.data
               ? normalizeReferences((evt.data as { references?: unknown }).references)
               : [];
           const endSearchMeta =
@@ -160,8 +158,10 @@ export async function streamXhsPostGeneration(
             "cover_image" in evt.data &&
             typeof (evt.data as { cover_image?: unknown }).cover_image === "object" &&
             (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } }).cover_image &&
-            (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } }).cover_image.ok === true &&
-            typeof (evt.data as { cover_image: { image_path?: unknown } }).cover_image.image_path === "string"
+            (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } }).cover_image.ok ===
+              true &&
+            typeof (evt.data as { cover_image: { image_path?: unknown } }).cover_image
+              .image_path === "string"
               ? String((evt.data as { cover_image: { image_path: string } }).cover_image.image_path)
               : "";
           const endCoverImageError =
@@ -170,7 +170,8 @@ export async function streamXhsPostGeneration(
             "cover_image" in evt.data &&
             typeof (evt.data as { cover_image?: unknown }).cover_image === "object" &&
             (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image &&
-            (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image.ok === false &&
+            (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image.ok ===
+              false &&
             typeof (evt.data as { cover_image: { error?: unknown } }).cover_image.error === "string"
               ? String((evt.data as { cover_image: { error: string } }).cover_image.error)
               : "";

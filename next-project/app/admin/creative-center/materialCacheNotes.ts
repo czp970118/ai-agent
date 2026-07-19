@@ -221,9 +221,7 @@ function matchNotesByReferences(
   items: MaterialCacheNote[],
   references: MessageReference[],
 ): MaterialCacheNote[] {
-  const refIds = new Set(
-    references.map((r) => noteIdFromReferenceUrl(r.url)).filter(Boolean),
-  );
+  const refIds = new Set(references.map((r) => noteIdFromReferenceUrl(r.url)).filter(Boolean));
   if (refIds.size === 0) return [];
   return items.filter((n) => refIds.has(n.note_id));
 }
@@ -253,9 +251,7 @@ export async function fetchMaterialCacheNotes(
   }
 
   if (references.length > 0) {
-    const refIds = new Set(
-      references.map((r) => noteIdFromReferenceUrl(r.url)).filter(Boolean),
-    );
+    const refIds = new Set(references.map((r) => noteIdFromReferenceUrl(r.url)).filter(Boolean));
     if (refIds.size > 0) {
       const broad = await fetchMaterialCachePage(
         { keyword: "", domain: query.domain, cityName: query.cityName },

@@ -5,11 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import type { MessageReference } from "@/app/assistant/utils/types";
 import DraftStreamCreation, { type StreamAdoptMeta } from "../DraftStreamCreation";
-import {
-  coverToWorkPatch,
-  emptyCreativeCover,
-  type CreativeCoverState,
-} from "../creativeCover";
+import { coverToWorkPatch, emptyCreativeCover, type CreativeCoverState } from "../creativeCover";
 import { useMaterialCache } from "../useMaterialCache";
 import { createWork, type WorkStatus } from "../workStorage";
 

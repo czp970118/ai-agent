@@ -21,14 +21,13 @@ export default function AdminGuestShell({ children }: { children: ReactNode }) {
     const origFetch = window.fetch.bind(window);
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const method = (
-        init?.method ??
-        (input instanceof Request ? input.method : "GET")
+        init?.method ?? (input instanceof Request ? input.method : "GET")
       ).toUpperCase();
       if (MUTATION_METHODS.has(method)) {
-        return new Response(
-          JSON.stringify({ error: "访客模式下不可修改后台数据" }),
-          { status: 403, headers: { "Content-Type": "application/json" } },
-        );
+        return new Response(JSON.stringify({ error: "访客模式下不可修改后台数据" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        });
       }
       return origFetch(input, init);
     };
@@ -46,7 +45,8 @@ export default function AdminGuestShell({ children }: { children: ReactNode }) {
         .querySelectorAll("button, input, select, textarea, [contenteditable='true']")
         .forEach((node) => {
           if (!shouldDisable(node, false)) return;
-          const el = node as HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+          const el = node as
+            HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
           el.disabled = true;
           if (el instanceof HTMLElement && el.getAttribute("contenteditable") === "true") {
             el.setAttribute("contenteditable", "false");

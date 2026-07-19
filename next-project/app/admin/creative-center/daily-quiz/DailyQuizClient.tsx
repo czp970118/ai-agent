@@ -10,10 +10,7 @@ import {
 } from "@/app/admin/question-bank/questionBankClient";
 import CategorySelect from "@/app/admin/question-bank/CategorySelect";
 import TagInput from "@/app/admin/question-bank/TagInput";
-import {
-  renderQuizAnswerCard,
-  renderQuizQuestionCard,
-} from "../creativeCover";
+import { renderQuizAnswerCard, renderQuizQuestionCard } from "../creativeCover";
 import { exportDailyQuizZip } from "./dailyQuizExport";
 import { publishDailyQuiz } from "./dailyQuizPublish";
 import {
@@ -67,31 +64,22 @@ export default function DailyQuizClient() {
   const [subjectDomain, setSubjectDomain] = useState("");
   const [recallTags, setRecallTags] = useState<string[]>([]);
   const [recallCount, setRecallCount] = useState(DAILY_QUIZ_SLOT_COUNT);
-  const [recallRealExamFilter, setRecallRealExamFilter] =
-    useState<RecallRealExamFilter>("all");
+  const [recallRealExamFilter, setRecallRealExamFilter] = useState<RecallRealExamFilter>("all");
   const [slots, setSlots] = useState<DailyQuizSlot[]>([]);
   const [recalling, setRecalling] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [publishInfo, setPublishInfo] = useState<{ workId: string; marked: number } | null>(
-    null,
-  );
+  const [publishInfo, setPublishInfo] = useState<{ workId: string; marked: number } | null>(null);
   const [previewImage, setPreviewImage] = useState<QuizPreviewImage | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const slotWorkId = useCallback(
-    (index: number, questionId: string) =>
-      `${sessionWorkId}-slot-${index}-${questionId}`,
+    (index: number, questionId: string) => `${sessionWorkId}-slot-${index}-${questionId}`,
     [sessionWorkId],
   );
 
-  const updateSlot = useCallback(
-    (index: number, patch: Partial<DailyQuizSlot>) => {
-      setSlots((prev) =>
-        prev.map((s, i) => (i === index ? { ...s, ...patch } : s)),
-      );
-    },
-    [],
-  );
+  const updateSlot = useCallback((index: number, patch: Partial<DailyQuizSlot>) => {
+    setSlots((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }, []);
 
   const recallBatch = useCallback(
     async (
@@ -181,9 +169,7 @@ export default function DailyQuizClient() {
 
   const generatedCount = slots.filter((s) => s.questionPath && s.answerPath).length;
   const allImagesReady =
-    slots.length > 0 &&
-    generatedCount === slots.length &&
-    !slots.some((s) => s.busy);
+    slots.length > 0 && generatedCount === slots.length && !slots.some((s) => s.busy);
 
   const onExportAll = useCallback(async () => {
     setExporting(true);
@@ -225,7 +211,8 @@ export default function DailyQuizClient() {
 
       <section className={`${ui.page} mb-6`}>
         <p className={`${ui.hint} mb-4`}>
-          水墨底图答题卡 / 答案解析卡，程序排版（非 AI 生图）。从题库召回未使用过的题目，生成双图后导出即视为准备发布：题目将标记为已使用，并保存到创作中心作品列表。
+          水墨底图答题卡 / 答案解析卡，程序排版（非 AI
+          生图）。从题库召回未使用过的题目，生成双图后导出即视为准备发布：题目将标记为已使用，并保存到创作中心作品列表。
         </p>
         <p className={ui.sectionTitle}>召回条件</p>
         <div className={`${ui.panel} space-y-4`}>
@@ -311,10 +298,7 @@ export default function DailyQuizClient() {
             查看创作中心作品
           </Link>
           <span className="mx-1">·</span>
-          <Link
-            href="/admin/creative-center"
-            className="font-medium underline hover:no-underline"
-          >
+          <Link href="/admin/creative-center" className="font-medium underline hover:no-underline">
             返回列表
           </Link>
         </p>
@@ -351,7 +335,8 @@ export default function DailyQuizClient() {
             <footer className="sticky bottom-0 z-10 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:-mx-0 sm:rounded-xl sm:border sm:px-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className={`${ui.hint} m-0`}>
-                  全部 {slots.length} 题双图已就绪。导出将下载 ZIP，并标记题目已使用、保存至创作中心。
+                  全部 {slots.length} 题双图已就绪。导出将下载
+                  ZIP，并标记题目已使用、保存至创作中心。
                 </p>
                 <button
                   type="button"
@@ -366,10 +351,7 @@ export default function DailyQuizClient() {
           ) : null}
         </>
       )}
-      <QuizImagePreviewModal
-        image={previewImage}
-        onClose={() => setPreviewImage(null)}
-      />
+      <QuizImagePreviewModal image={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   );
 }
@@ -534,17 +516,13 @@ function SlotCard({
                 )}
               </span>
             ) : null}
-            {question.category ? (
-              <span className={ui.badge}>{question.category}</span>
-            ) : null}
+            {question.category ? <span className={ui.badge}>{question.category}</span> : null}
             {question.subjectDomain ? (
               <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
                 {question.subjectDomain}
               </span>
             ) : null}
-            {question.header ? (
-              <span className={ui.badge}>{question.header}</span>
-            ) : null}
+            {question.header ? <span className={ui.badge}>{question.header}</span> : null}
             {(question.tags ?? []).map((tag) => (
               <span
                 key={tag}
@@ -579,11 +557,7 @@ function SlotCard({
             onClick={onGenerate}
             className={`${ui.buttonPrimary} bg-amber-500 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-600`}
           >
-            {busy === "generating"
-              ? "生成中…"
-              : hasImages
-                ? "重新生成双图"
-                : "生成答题卡与解析图"}
+            {busy === "generating" ? "生成中…" : hasImages ? "重新生成双图" : "生成答题卡与解析图"}
           </button>
         </div>
         <div className="flex flex-wrap items-end gap-2">

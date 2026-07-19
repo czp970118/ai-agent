@@ -76,9 +76,7 @@ export default function CoverSelect({
                 <button
                   type="button"
                   className={`flex w-full px-2.5 py-2 text-left text-xs leading-snug transition ${
-                    on
-                      ? "bg-rose-50 font-medium text-rose-800"
-                      : "text-slate-800 hover:bg-slate-50"
+                    on ? "bg-rose-50 font-medium text-rose-800" : "text-slate-800 hover:bg-slate-50"
                   }`}
                   onClick={() => {
                     onChange(opt.value);

@@ -83,7 +83,10 @@ export default function ConfirmAlertDialog({
             {icon.glyph}
           </span>
           <div className="min-w-0 flex-1 pt-0.5">
-            <p id="confirm-dialog-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            <p
+              id="confirm-dialog-title"
+              className="text-base font-semibold text-slate-900 dark:text-slate-100"
+            >
               {title}
             </p>
             <p

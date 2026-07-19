@@ -5,8 +5,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-const richWrapper =
-  "max-w-none text-sm leading-relaxed text-slate-800";
+const richWrapper = "max-w-none text-sm leading-relaxed text-slate-800";
 
 const htmlRichClass = `${richWrapper} space-y-2 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_p]:text-slate-800 [&_span]:text-slate-800 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:my-0.5 [&_li]:text-slate-800 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_strong]:font-semibold [&_hr]:my-3 [&_hr]:border-slate-200 [&_hr]:dark:border-slate-600 [&_a]:text-rose-600 [&_a]:underline dark:[&_a]:text-rose-400 [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic dark:[&_blockquote]:border-slate-600`;
 
@@ -135,7 +134,7 @@ export function isLikelyHtmlFragment(s: string): boolean {
   if (t.length < 3 || !t.startsWith("<") || !t.includes(">")) return false;
   const head = t.slice(0, 4000);
   return /<\/?(p|div|h[1-6]|ul|ol|li|strong|em|table|thead|tbody|tr|td|th|br|hr|section|article|blockquote|span)\b/i.test(
-    head
+    head,
   );
 }
 
@@ -147,9 +146,7 @@ type Props = {
 
 export default function MessageContent({ role, content, isStreaming = false }: Props) {
   if (role === "user") {
-    return (
-      <p className="text-sm whitespace-pre-wrap break-words">{content}</p>
-    );
+    return <p className="text-sm whitespace-pre-wrap break-words">{content}</p>;
   }
 
   if (isLikelyHtmlFragment(content)) {

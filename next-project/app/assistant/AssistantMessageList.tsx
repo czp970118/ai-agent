@@ -33,7 +33,6 @@ export default function AssistantMessageList({
   onRegenerate,
   listEndRef,
 }: Props) {
-
   return (
     <ul className="space-y-4 pb-2">
       {messages.map((msg) => (
@@ -49,57 +48,63 @@ export default function AssistantMessageList({
             }`}
           >
             <div className="min-w-0">
-              {msg.role === "assistant" && loading && msg.content.trim() === "正在搜索并总结文案..." ? (
+              {msg.role === "assistant" &&
+              loading &&
+              msg.content.trim() === "正在搜索并总结文案..." ? (
                 <div className="thinking-shimmer text-sm">正在搜索并总结文案...</div>
               ) : (
                 <MessageContent role={msg.role} content={msg.content} />
               )}
             </div>
-            {msg.role === "assistant" && Array.isArray(msg.references) && msg.references.length > 0 && (
-              <details className="reference-panel mt-1 rounded-xl border border-slate-200/90 bg-slate-50/85 px-3 py-2 text-xs dark:border-slate-600/80 dark:bg-slate-700/35">
-                <summary className="reference-summary flex items-center justify-between gap-2 text-slate-600 dark:text-slate-300">
-                  <span className="truncate leading-relaxed">
-                    搜索 {msg.searchMeta?.queryCount ?? msg.searchMeta?.queryTerms.length ?? 0} 个关键词，参考{" "}
-                    {msg.references.length} 篇资料
-                    {Array.isArray(msg.searchMeta?.queryTerms) && msg.searchMeta.queryTerms.length > 0
-                      ? `（${msg.searchMeta.queryTerms.join("、")}）`
-                      : ""}
-                  </span>
-                  <span
-                    aria-hidden
-                    className="reference-chevron inline-flex h-4 w-4 shrink-0 items-center justify-center text-slate-400"
-                  >
-                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                      <path
-                        fillRule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.12l3.71-3.89a.75.75 0 111.08 1.04l-4.25 4.46a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </span>
-                </summary>
-                {Array.isArray(msg.searchMeta?.queryTerms) && msg.searchMeta.queryTerms.length > 0 && (
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                    {msg.searchMeta.queryTerms.map((t) => `“${t}”`).join("、")}
-                  </p>
-                )}
-                <ul className="mt-2 space-y-1.5 border-t border-slate-200/70 pt-2 dark:border-slate-600/70">
-                  {msg.references.map((ref, idx) => (
-                    <li key={`${ref.url}-${idx}`} className="leading-relaxed">
-                      <span className="mr-1 text-slate-500">{idx + 1}.</span>
-                      <a
-                        href={ref.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-rose-600 underline dark:text-rose-400"
-                      >
-                        {ref.title || ref.url}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
+            {msg.role === "assistant" &&
+              Array.isArray(msg.references) &&
+              msg.references.length > 0 && (
+                <details className="reference-panel mt-1 rounded-xl border border-slate-200/90 bg-slate-50/85 px-3 py-2 text-xs dark:border-slate-600/80 dark:bg-slate-700/35">
+                  <summary className="reference-summary flex items-center justify-between gap-2 text-slate-600 dark:text-slate-300">
+                    <span className="truncate leading-relaxed">
+                      搜索 {msg.searchMeta?.queryCount ?? msg.searchMeta?.queryTerms.length ?? 0}{" "}
+                      个关键词，参考 {msg.references.length} 篇资料
+                      {Array.isArray(msg.searchMeta?.queryTerms) &&
+                      msg.searchMeta.queryTerms.length > 0
+                        ? `（${msg.searchMeta.queryTerms.join("、")}）`
+                        : ""}
+                    </span>
+                    <span
+                      aria-hidden
+                      className="reference-chevron inline-flex h-4 w-4 shrink-0 items-center justify-center text-slate-400"
+                    >
+                      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                        <path
+                          fillRule="evenodd"
+                          d="M5.23 7.21a.75.75 0 011.06.02L10 11.12l3.71-3.89a.75.75 0 111.08 1.04l-4.25 4.46a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </span>
+                  </summary>
+                  {Array.isArray(msg.searchMeta?.queryTerms) &&
+                    msg.searchMeta.queryTerms.length > 0 && (
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        {msg.searchMeta.queryTerms.map((t) => `“${t}”`).join("、")}
+                      </p>
+                    )}
+                  <ul className="mt-2 space-y-1.5 border-t border-slate-200/70 pt-2 dark:border-slate-600/70">
+                    {msg.references.map((ref, idx) => (
+                      <li key={`${ref.url}-${idx}`} className="leading-relaxed">
+                        <span className="mr-1 text-slate-500">{idx + 1}.</span>
+                        <a
+                          href={ref.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-rose-600 underline dark:text-rose-400"
+                        >
+                          {ref.title || ref.url}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             {msg.role === "assistant" && msg.coverImagePath ? (
               <div className="mt-1.5 rounded-xl border border-slate-200/90 bg-slate-50/80 p-2 dark:border-slate-600/80 dark:bg-slate-700/30">
                 <img
@@ -203,7 +208,11 @@ export default function AssistantMessageList({
                       strokeLinejoin="round"
                       d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"
                     />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+                    />
                   </svg>
                 </button>
               )}

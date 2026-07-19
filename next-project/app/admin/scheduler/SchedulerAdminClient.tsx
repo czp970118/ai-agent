@@ -174,9 +174,12 @@ export default function SchedulerAdminClient() {
     setCancellingId(taskId);
     setError("");
     try {
-      const res = await fetch(`${getMcpBaseUrl()}/search/scheduler/xhs/tasks/${encodeURIComponent(taskId)}/cancel`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `${getMcpBaseUrl()}/search/scheduler/xhs/tasks/${encodeURIComponent(taskId)}/cancel`,
+        {
+          method: "POST",
+        },
+      );
       if (!res.ok) throw new Error(await res.text());
       await loadTasks();
     } catch (e) {
@@ -190,9 +193,12 @@ export default function SchedulerAdminClient() {
     setRetryingId(taskId);
     setError("");
     try {
-      const res = await fetch(`${getMcpBaseUrl()}/search/scheduler/xhs/tasks/${encodeURIComponent(taskId)}/retry`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `${getMcpBaseUrl()}/search/scheduler/xhs/tasks/${encodeURIComponent(taskId)}/retry`,
+        {
+          method: "POST",
+        },
+      );
       if (!res.ok) throw new Error(await res.text());
       await loadTasks();
     } catch (e) {
@@ -212,24 +218,41 @@ export default function SchedulerAdminClient() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className={ui.title}>定时任务管理</h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">按实例配置抓取策略，追踪执行状态并支持失败重试。</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            按实例配置抓取策略，追踪执行状态并支持失败重试。
+          </p>
         </div>
-        <button type="button" className={ui.buttonSecondary} onClick={() => void loadTasks()} disabled={loading}>
+        <button
+          type="button"
+          className={ui.buttonSecondary}
+          onClick={() => void loadTasks()}
+          disabled={loading}
+        >
           刷新
         </button>
       </div>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-3 dark:border-slate-700 dark:from-slate-900 dark:to-slate-900/60">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">任务总数</p>
-          <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{tasks.length}</p>
+          <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            任务总数
+          </p>
+          <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {tasks.length}
+          </p>
         </div>
         <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white px-4 py-3 dark:border-amber-800 dark:from-amber-950/30 dark:to-slate-900">
-          <p className="text-[11px] uppercase tracking-wide text-amber-700 dark:text-amber-300">待执行</p>
-          <p className="mt-1 text-lg font-semibold text-amber-700 dark:text-amber-200">{pendingCount}</p>
+          <p className="text-[11px] uppercase tracking-wide text-amber-700 dark:text-amber-300">
+            待执行
+          </p>
+          <p className="mt-1 text-lg font-semibold text-amber-700 dark:text-amber-200">
+            {pendingCount}
+          </p>
         </div>
         <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white px-4 py-3 dark:border-emerald-800 dark:from-emerald-950/30 dark:to-slate-900">
-          <p className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-300">已完成</p>
+          <p className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+            已完成
+          </p>
           <p className="mt-1 text-lg font-semibold text-emerald-700 dark:text-emerald-200">
             {tasks.filter((t) => t.status === "SUCCESS").length}
           </p>
@@ -328,11 +351,23 @@ export default function SchedulerAdminClient() {
           </label>
           <label className="grid gap-1">
             <span className={ui.hint}>城市</span>
-            <input className={ui.input} value={city} onChange={(e) => setCity(e.target.value)} placeholder="如：杭州" />
+            <input
+              className={ui.input}
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="如：杭州"
+            />
           </label>
           <label className="grid gap-1">
             <span className={ui.hint}>抓取次数</span>
-            <input className={ui.input} type="number" min={1} max={24} value={fetchCount} onChange={(e) => setFetchCount(Number(e.target.value || 1))} />
+            <input
+              className={ui.input}
+              type="number"
+              min={1}
+              max={24}
+              value={fetchCount}
+              onChange={(e) => setFetchCount(Number(e.target.value || 1))}
+            />
           </label>
           <label className="grid gap-1">
             <span className={ui.hint}>每次抓取条数</span>
@@ -364,7 +399,9 @@ export default function SchedulerAdminClient() {
               className="inline-flex h-10 w-fit items-center gap-2 rounded-lg border-slate-200 bg-white px-3 text-left transition"
               aria-pressed={emailEnabled}
             >
-              <span className="text-sm text-slate-700 dark:text-slate-200">{emailEnabled ? "发送邮件通知" : "不发邮件通知"}</span>
+              <span className="text-sm text-slate-700 dark:text-slate-200">
+                {emailEnabled ? "发送邮件通知" : "不发邮件通知"}
+              </span>
               <span
                 className={`inline-flex h-5 w-9 items-center rounded-full p-0.5 transition ${
                   emailEnabled ? "bg-sky-500" : "bg-slate-300 dark:bg-slate-600"
@@ -381,7 +418,9 @@ export default function SchedulerAdminClient() {
         </div>
         <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-3 dark:border-slate-700 dark:bg-slate-900/70">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">抓取时间点与主题（长度必须与抓取次数一致）</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              抓取时间点与主题（长度必须与抓取次数一致）
+            </p>
             <button type="button" className={ui.buttonSecondary} onClick={randomizeTimePoints}>
               一键随机生成时间点
             </button>
@@ -419,7 +458,12 @@ export default function SchedulerAdminClient() {
         </div>
         <div className="mt-3 flex items-center justify-between">
           <p className={ui.hint}>当前待执行任务：{pendingCount}</p>
-          <button type="button" className={ui.buttonPrimary} onClick={() => void createTask()} disabled={creating}>
+          <button
+            type="button"
+            className={ui.buttonPrimary}
+            onClick={() => void createTask()}
+            disabled={creating}
+          >
             {creating ? "创建中..." : "创建任务"}
           </button>
         </div>
@@ -445,7 +489,11 @@ export default function SchedulerAdminClient() {
             {tasks.map((t) => (
               <tr key={t.task_id} className={ui.tableRow}>
                 <td className="px-3 py-2 text-xs align-middle">
-                  <span className={`inline-flex rounded-md border px-2 py-0.5 ${taskStatusClass(t.status)}`}>{t.status}</span>
+                  <span
+                    className={`inline-flex rounded-md border px-2 py-0.5 ${taskStatusClass(t.status)}`}
+                  >
+                    {t.status}
+                  </span>
                 </td>
                 <td className="px-3 py-2 text-xs align-middle">{t.source}</td>
                 <td className="px-3 py-2 text-xs align-middle">{t.run_date || "-"}</td>
@@ -477,7 +525,8 @@ export default function SchedulerAdminClient() {
                 </td>
                 <td className="px-3 py-2 text-xs align-middle">
                   {(() => {
-                    const slotResults = t.slot_results && typeof t.slot_results === "object" ? t.slot_results : {};
+                    const slotResults =
+                      t.slot_results && typeof t.slot_results === "object" ? t.slot_results : {};
                     const done = Array.from({ length: t.fetch_count }, (_, i) => {
                       const v = String(slotResults[String(i)] || "");
                       return v === "SUCCESS" || v === "FAILED";

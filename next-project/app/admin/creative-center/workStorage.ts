@@ -22,19 +22,14 @@ export type CreativeWork = {
   coverTitleSub?: string;
 };
 
-export const PLATFORM_META: Record<
-  PlatformId,
-  { label: string; chipClass: string }
-> = {
+export const PLATFORM_META: Record<PlatformId, { label: string; chipClass: string }> = {
   xhs: {
     label: "小红书",
-    chipClass:
-      "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200",
+    chipClass: "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200",
   },
   douyin: {
     label: "抖音",
-    chipClass:
-      "bg-cyan-100 text-cyan-900 dark:bg-cyan-950/50 dark:text-cyan-100",
+    chipClass: "bg-cyan-100 text-cyan-900 dark:bg-cyan-950/50 dark:text-cyan-100",
   },
 };
 

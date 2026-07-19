@@ -33,10 +33,7 @@ const CATEGORIES = ["公基", "行测", "时政", "面试", "未分类"];
 
 type ImportMode = "upload" | "paste";
 
-type PendingConfirm =
-  | { kind: "parse" }
-  | { kind: "reparse" }
-  | { kind: "confirm"; count: number };
+type PendingConfirm = { kind: "parse" } | { kind: "reparse" } | { kind: "confirm"; count: number };
 
 function optionsToText(opts: string[]): string {
   return opts.join("\n");
@@ -115,12 +112,10 @@ export default function QuestionBankImportClient() {
   const allowedExts = importConfig?.allowedExtensions ?? [".docx"];
 
   const hasExtracted = importMeta?.status === "text_extracted";
-  const hasParsed = items.length > 0 || importMeta?.status === "parsed" || importMeta?.status === "parse_failed";
+  const hasParsed =
+    items.length > 0 || importMeta?.status === "parsed" || importMeta?.status === "parse_failed";
 
-  const selectedCount = useMemo(
-    () => items.filter((it) => it.selected).length,
-    [items],
-  );
+  const selectedCount = useMemo(() => items.filter((it) => it.selected).length, [items]);
 
   const showAnswerPreview = answerText.length > 0 || answerCharCount > 0;
   const hasExtractedText = questionCharCount > 0 || answerCharCount > 0;
@@ -137,7 +132,9 @@ export default function QuestionBankImportClient() {
     const aText = String(res.answerText ?? res.answer_text ?? "");
     setQuestionText(qText);
     setAnswerText(aText);
-    setQuestionCharCount(Number(res.questionCharCount ?? res.question_char_count ?? qText.length) || 0);
+    setQuestionCharCount(
+      Number(res.questionCharCount ?? res.question_char_count ?? qText.length) || 0,
+    );
     setAnswerCharCount(Number(res.answerCharCount ?? res.answer_char_count ?? aText.length) || 0);
     setQuestionTruncated(Boolean(res.questionTruncated ?? res.question_truncated));
     setAnswerTruncated(Boolean(res.answerTruncated ?? res.answer_truncated));
@@ -213,14 +210,7 @@ export default function QuestionBankImportClient() {
     } finally {
       setUploading(false);
     }
-  }, [
-    importMode,
-    files,
-    category,
-    pasteText,
-    allowedExts,
-    importConfig?.maxUploadBytes,
-  ]);
+  }, [importMode, files, category, pasteText, allowedExts, importConfig?.maxUploadBytes]);
 
   const runParse = useCallback(async () => {
     if (!importMeta?.id) return;
@@ -281,9 +271,7 @@ export default function QuestionBankImportClient() {
   }, [importMeta?.id]);
 
   const toggleSelected = (id: string) => {
-    setItems((prev) =>
-      prev.map((it) => (it.id === id ? { ...it, selected: !it.selected } : it)),
-    );
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, selected: !it.selected } : it)));
   };
 
   const startEdit = (it: QuestionImportItem) => {
@@ -332,13 +320,17 @@ export default function QuestionBankImportClient() {
     setConfirming(true);
     setError("");
     try {
-      const res = await confirmQuestionImport(importMeta.id, selected.map((it) => it.id), {
-        tags: importTags,
-        isRealExam: importIsRealExam,
-        examYear: importExamYear.trim(),
-        examRegion: importExamRegion.trim(),
-        examKind: importExamKind,
-      });
+      const res = await confirmQuestionImport(
+        importMeta.id,
+        selected.map((it) => it.id),
+        {
+          tags: importTags,
+          isRealExam: importIsRealExam,
+          examYear: importExamYear.trim(),
+          examRegion: importExamRegion.trim(),
+          examKind: importExamKind,
+        },
+      );
       const examSummary = importIsRealExam
         ? formatRealExamSummary(importExamYear.trim(), importExamRegion.trim(), importExamKind)
         : "";
@@ -440,9 +432,7 @@ export default function QuestionBankImportClient() {
           ← 返回题库列表
         </Link>
         <h1 className={`${ui.title} mt-2`}>导入题库</h1>
-        <p className={`mt-1 ${ui.hint}`}>
-          {importConfig?.hint || "加载配置中…"}
-        </p>
+        <p className={`mt-1 ${ui.hint}`}>{importConfig?.hint || "加载配置中…"}</p>
       </div>
 
       <section className={`${ui.panel} mb-6 space-y-4`}>
@@ -612,13 +602,17 @@ export default function QuestionBankImportClient() {
               <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
                 题目卷
                 {questionFormat ? (
-                  <span className={`ml-2 ${ui.badge}`}>{questionFormat.replace(".", "").toUpperCase()}</span>
+                  <span className={`ml-2 ${ui.badge}`}>
+                    {questionFormat.replace(".", "").toUpperCase()}
+                  </span>
                 ) : null}
               </p>
               <span className={ui.hint}>{questionCharCount.toLocaleString()} 字</span>
             </div>
             {questionTruncated ? (
-              <p className={ui.hint}>题目卷仅展示前 {questionText.length.toLocaleString()} 字；AI 结构化使用完整文本。</p>
+              <p className={ui.hint}>
+                题目卷仅展示前 {questionText.length.toLocaleString()} 字；AI 结构化使用完整文本。
+              </p>
             ) : null}
             <textarea
               className={`${ui.textarea} max-h-[22rem] min-h-[10rem] font-mono text-xs leading-relaxed`}
@@ -640,13 +634,17 @@ export default function QuestionBankImportClient() {
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
                   答案/解析卷
                   {answerFormat ? (
-                    <span className={`ml-2 ${ui.badge}`}>{answerFormat.replace(".", "").toUpperCase()}</span>
+                    <span className={`ml-2 ${ui.badge}`}>
+                      {answerFormat.replace(".", "").toUpperCase()}
+                    </span>
                   ) : null}
                 </p>
                 <span className={ui.hint}>{answerCharCount.toLocaleString()} 字</span>
               </div>
               {answerTruncated ? (
-                <p className={ui.hint}>答案卷仅展示前 {answerText.length.toLocaleString()} 字；AI 结构化使用完整文本。</p>
+                <p className={ui.hint}>
+                  答案卷仅展示前 {answerText.length.toLocaleString()} 字；AI 结构化使用完整文本。
+                </p>
               ) : null}
               <textarea
                 className={`${ui.textarea} max-h-[22rem] min-h-[10rem] font-mono text-xs leading-relaxed`}
@@ -678,7 +676,9 @@ export default function QuestionBankImportClient() {
       {hasParsed && items.length > 0 ? (
         <section className="mb-6">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className={ui.sectionTitle}>3. 题目预览并入库（已选 {selectedCount} / {items.length}）</p>
+            <p className={ui.sectionTitle}>
+              3. 题目预览并入库（已选 {selectedCount} / {items.length}）
+            </p>
             <div className="flex gap-2">
               {importMeta?.status === "parse_failed" ? (
                 <button
@@ -711,10 +711,7 @@ export default function QuestionBankImportClient() {
 
           <div className="space-y-4">
             {items.map((it) => (
-              <article
-                key={it.id}
-                className={`${ui.panel} ${it.selected ? "" : "opacity-60"}`}
-              >
+              <article key={it.id} className={`${ui.panel} ${it.selected ? "" : "opacity-60"}`}>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <input
                     type="checkbox"
@@ -729,11 +726,7 @@ export default function QuestionBankImportClient() {
                   ) : null}
                   {questionHasRealExamMeta(it) && it.examKind ? (
                     <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                      {formatRealExamSummary(
-                        it.examYear ?? "",
-                        it.examRegion ?? "",
-                        it.examKind,
-                      )}
+                      {formatRealExamSummary(it.examYear ?? "", it.examRegion ?? "", it.examKind)}
                     </span>
                   ) : null}
                   <span className={ui.badge}>{it.header}</span>
@@ -791,12 +784,14 @@ export default function QuestionBankImportClient() {
                       className={ui.textarea}
                       rows={2}
                       value={editDraft.explanation ?? ""}
-                      onChange={(e) =>
-                        setEditDraft((d) => ({ ...d, explanation: e.target.value }))
-                      }
+                      onChange={(e) => setEditDraft((d) => ({ ...d, explanation: e.target.value }))}
                     />
                     <div className="flex gap-2">
-                      <button type="button" className={ui.buttonPrimary} onClick={() => void saveEdit()}>
+                      <button
+                        type="button"
+                        className={ui.buttonPrimary}
+                        onClick={() => void saveEdit()}
+                      >
                         保存
                       </button>
                       <button

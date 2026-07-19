@@ -50,9 +50,7 @@ export default function CoverImageSection({
   );
   const [quizHeader, setQuizHeader] = useState("公基常识");
   const [quizQuestion, setQuizQuestion] = useState("");
-  const [quizOptionsText, setQuizOptionsText] = useState(
-    "A. 夫妻\nB. 姐妹\nC. 恋人\nD. 兄弟",
-  );
+  const [quizOptionsText, setQuizOptionsText] = useState("A. 夫妻\nB. 姐妹\nC. 恋人\nD. 兄弟");
   const [quizAnswerHeader, setQuizAnswerHeader] = useState("答案解析");
   const [quizAnswer, setQuizAnswer] = useState("");
   const [quizExplanation, setQuizExplanation] = useState("");
@@ -524,7 +522,9 @@ export default function CoverImageSection({
               </div>
             </div>
           ) : (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">暂无已选配图，请上传底图。</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              暂无已选配图，请上传底图。
+            </p>
           )}
           <label className="block text-[11px] text-slate-600 dark:text-slate-400">
             主标题（居中白字描边）
@@ -572,7 +572,7 @@ export default function CoverImageSection({
               value={quizQuestion}
               onChange={(e) => setQuizQuestion(e.target.value)}
               rows={3}
-              placeholder={'1. 「鸳鸯」在古代指的是（  ）'}
+              placeholder={"1. 「鸳鸯」在古代指的是（  ）"}
               className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900"
             />
           </label>
@@ -694,7 +694,8 @@ export default function CoverImageSection({
             >
               baoyu-image-cards
             </a>{" "}
-            组装 prompt → <code className="text-[10px]">image-cards/…/prompts/01-cover-*.md</code> → DashScope 出图
+            组装 prompt → <code className="text-[10px]">image-cards/…/prompts/01-cover-*.md</code> →
+            DashScope 出图
           </p>
           <div className="block text-[11px] text-slate-600 dark:text-slate-400">
             <span className="mb-1 block">风格预设 Preset</span>
@@ -826,7 +827,9 @@ export default function CoverImageSection({
             {busy ? "生成中…" : "按 baoyu 规范生成封面"}
           </button>
           {lastPromptPath ? (
-            <p className="text-[10px] text-slate-500 dark:text-slate-400">Prompt 文件：{lastPromptPath}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+              Prompt 文件：{lastPromptPath}
+            </p>
           ) : null}
         </div>
       )}

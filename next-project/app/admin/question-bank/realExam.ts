@@ -7,12 +7,7 @@ const EXAM_KIND_ALIASES: Record<string, RealExamKind> = {
   事业编: "事业单位",
 };
 
-const KINDS_REQUIRE_REGION = new Set<RealExamKind>([
-  "省考",
-  "联考",
-  "事业单位",
-  "选调生",
-]);
+const KINDS_REQUIRE_REGION = new Set<RealExamKind>(["省考", "联考", "事业单位", "选调生"]);
 
 export function canonicalExamKind(kind: string): string {
   const k = kind.trim();

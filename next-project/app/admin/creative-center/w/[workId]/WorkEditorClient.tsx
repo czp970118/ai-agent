@@ -180,9 +180,7 @@ export default function WorkEditorClient() {
   }
 
   if (hydrated && !work && !loadError) {
-    return (
-      <div className="text-sm text-slate-500 dark:text-slate-400">正在返回创作中心…</div>
-    );
+    return <div className="text-sm text-slate-500 dark:text-slate-400">正在返回创作中心…</div>;
   }
 
   if (loadError || !work) {
@@ -320,7 +318,9 @@ export default function WorkEditorClient() {
           </label>
           <div className="flex flex-wrap items-end gap-3">
             <div className="shrink-0">
-              <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">状态</span>
+              <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                状态
+              </span>
               <div
                 className="mt-1 flex rounded-lg border border-slate-200 bg-slate-50/80 p-0.5 dark:border-slate-700 dark:bg-slate-950/50"
                 role="radiogroup"

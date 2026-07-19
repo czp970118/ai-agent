@@ -2,8 +2,10 @@ export const adminFormStyles = {
   page: "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900",
   title: "text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100",
   hint: "text-xs text-slate-500 dark:text-slate-400",
-  sectionTitle: "mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
-  panel: "rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-950/40",
+  sectionTitle:
+    "mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
+  panel:
+    "rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-950/40",
   /** 表单行内控件统一高度（Select、文件框、按钮对齐） */
   controlH: "h-10",
   toolbarLabel: "block h-4 leading-4",
@@ -25,8 +27,10 @@ export const adminFormStyles = {
   listItemActive: "bg-slate-200 dark:bg-slate-700",
   tableWrap: "overflow-auto rounded-xl border border-slate-200 dark:border-slate-700",
   table: "min-w-full text-sm",
-  tableHeader: "border-b border-slate-200 bg-slate-50 text-left dark:border-slate-700 dark:bg-slate-800/40",
+  tableHeader:
+    "border-b border-slate-200 bg-slate-50 text-left dark:border-slate-700 dark:bg-slate-800/40",
   tableRow: "border-b border-slate-100 align-top dark:border-slate-800",
-  badge: "inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300",
+  badge:
+    "inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300",
   error: "mt-3 text-xs text-rose-600",
 };

@@ -10,12 +10,7 @@ import AssistantMessageList from "./AssistantMessageList";
 import { copyMessageToClipboard } from "./utils/clipboard";
 import { getMcpBaseUrl } from "./utils/mcpBaseUrl";
 import { getSessionUserId } from "./utils/sessionUserId";
-import type {
-  McpStreamEvent,
-  Message,
-  MessageReference,
-  MessageSearchMeta,
-} from "./utils/types";
+import type { McpStreamEvent, Message, MessageReference, MessageSearchMeta } from "./utils/types";
 
 /** 非安全上下文（如 http://局域网IP）下无 randomUUID，需降级 */
 function createClientId(): string {
@@ -161,8 +156,8 @@ export default function AssistantClient({ agentId }: Props) {
       try {
         const res = await fetch(
           `${getMcpBaseUrl()}/chat/prompt-library?agent=${encodeURIComponent(
-            agentId
-          )}&domain=${encodeURIComponent(selectedDomain)}&include_body=true`
+            agentId,
+          )}&domain=${encodeURIComponent(selectedDomain)}&include_body=true`,
         );
         if (!res.ok) {
           if (!cancelled) setCurrentDomainStyles([]);
@@ -194,7 +189,8 @@ export default function AssistantClient({ agentId }: Props) {
       return;
     }
     if (currentDomainStyles.some((item) => item.id === selectedPromptId)) return;
-    const defaultPrompt = currentDomainStyles.find((item) => !!item.is_default) ?? currentDomainStyles[0] ?? null;
+    const defaultPrompt =
+      currentDomainStyles.find((item) => !!item.is_default) ?? currentDomainStyles[0] ?? null;
     setSelectedPromptId(defaultPrompt?.id ?? "");
   }, [currentDomainStyles, selectedPromptId]);
 
@@ -234,7 +230,9 @@ export default function AssistantClient({ agentId }: Props) {
           .slice(0, 8)
       : [];
     return {
-      queryCount: Number.isFinite(queryCount) ? Math.max(0, Math.trunc(queryCount)) : queryTerms.length,
+      queryCount: Number.isFinite(queryCount)
+        ? Math.max(0, Math.trunc(queryCount))
+        : queryTerms.length,
       queryTerms,
     };
   }, []);
@@ -244,7 +242,7 @@ export default function AssistantClient({ agentId }: Props) {
     content: string,
     references?: MessageReference[],
     searchMeta?: MessageSearchMeta,
-    coverImagePath?: string
+    coverImagePath?: string,
   ) {
     setMessages((prev) => {
       const idx = prev.findIndex((m) => m.id === id);
@@ -263,44 +261,48 @@ export default function AssistantClient({ agentId }: Props) {
     });
   }
 
-  const normalizeStoredMessages = useCallback((data: unknown): Message[] => {
-    if (!Array.isArray(data)) return [];
-    const out: Message[] = [];
-    for (const item of data) {
-      if (!item || typeof item !== "object") continue;
-      const row = item as {
-        id?: unknown;
-        role?: unknown;
-        content?: unknown;
-        meta?: unknown;
-      };
-      const role = String(row.role ?? "").trim();
-      if (role !== "user" && role !== "assistant") continue;
-      const content = String(row.content ?? "");
-      const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
-      const refs =
-        "references" in meta
-          ? normalizeReferences((meta as { references?: unknown }).references)
-          : [];
-      const searchMeta =
-        "search_meta" in meta
-          ? normalizeSearchMeta((meta as { search_meta?: unknown }).search_meta)
-          : undefined;
-      const coverImagePath =
-        "cover_image_path" in meta && typeof (meta as { cover_image_path?: unknown }).cover_image_path === "string"
-          ? String((meta as { cover_image_path: string }).cover_image_path)
-          : undefined;
-      out.push({
-        id: String(row.id ?? createClientId()),
-        role,
-        content,
-        references: refs.length ? refs : undefined,
-        searchMeta,
-        coverImagePath,
-      });
-    }
-    return out;
-  }, [normalizeReferences, normalizeSearchMeta]);
+  const normalizeStoredMessages = useCallback(
+    (data: unknown): Message[] => {
+      if (!Array.isArray(data)) return [];
+      const out: Message[] = [];
+      for (const item of data) {
+        if (!item || typeof item !== "object") continue;
+        const row = item as {
+          id?: unknown;
+          role?: unknown;
+          content?: unknown;
+          meta?: unknown;
+        };
+        const role = String(row.role ?? "").trim();
+        if (role !== "user" && role !== "assistant") continue;
+        const content = String(row.content ?? "");
+        const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
+        const refs =
+          "references" in meta
+            ? normalizeReferences((meta as { references?: unknown }).references)
+            : [];
+        const searchMeta =
+          "search_meta" in meta
+            ? normalizeSearchMeta((meta as { search_meta?: unknown }).search_meta)
+            : undefined;
+        const coverImagePath =
+          "cover_image_path" in meta &&
+          typeof (meta as { cover_image_path?: unknown }).cover_image_path === "string"
+            ? String((meta as { cover_image_path: string }).cover_image_path)
+            : undefined;
+        out.push({
+          id: String(row.id ?? createClientId()),
+          role,
+          content,
+          references: refs.length ? refs : undefined,
+          searchMeta,
+          coverImagePath,
+        });
+      }
+      return out;
+    },
+    [normalizeReferences, normalizeSearchMeta],
+  );
 
   const resolveSession = useCallback(
     async (forceNew: boolean): Promise<string> => {
@@ -327,15 +329,15 @@ export default function AssistantClient({ agentId }: Props) {
       setConversationId(nextConversationId);
       return nextConversationId;
     },
-    [agentId]
+    [agentId],
   );
 
   const loadSessionMessages = useCallback(
     async (userId: string) => {
       const conversationsRes = await fetch(
         `${getMcpBaseUrl()}/chat/conversations?user_id=${encodeURIComponent(userId)}&agent=${encodeURIComponent(
-          agentId
-        )}&limit=100`
+          agentId,
+        )}&limit=100`,
       );
       if (!conversationsRes.ok) {
         throw new Error(`历史会话加载失败(${conversationsRes.status})`);
@@ -370,7 +372,7 @@ export default function AssistantClient({ agentId }: Props) {
 
       for (const conversationId of recentConversationIds) {
         const res = await fetch(
-          `${getMcpBaseUrl()}/chat/conversations/${encodeURIComponent(conversationId)}/messages`
+          `${getMcpBaseUrl()}/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
         );
         if (!res.ok) {
           throw new Error(`历史消息加载失败(${res.status})`);
@@ -406,11 +408,11 @@ export default function AssistantClient({ agentId }: Props) {
             role: row.role,
             content: row.content,
             meta: row.meta,
-          }))
-        )
+          })),
+        ),
       );
     },
-    [agentId, normalizeStoredMessages]
+    [agentId, normalizeStoredMessages],
   );
 
   async function persistMessages(
@@ -419,7 +421,7 @@ export default function AssistantClient({ agentId }: Props) {
       role: "user" | "assistant";
       content: string;
       meta?: Record<string, unknown>;
-    }>
+    }>,
   ) {
     if (!rows.length) return;
     await fetch(
@@ -428,7 +430,7 @@ export default function AssistantClient({ agentId }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: rows }),
-      }
+      },
     );
   }
 
@@ -463,7 +465,7 @@ export default function AssistantClient({ agentId }: Props) {
     conversationForChat: Message[],
     workflowPayload: Record<string, unknown> | null,
     assistantMessageId: string,
-    signal: AbortSignal
+    signal: AbortSignal,
   ): Promise<{
     content: string;
     references: MessageReference[];
@@ -538,9 +540,7 @@ export default function AssistantClient({ agentId }: Props) {
                 ? String((evt.data as { content: string }).content)
                 : "";
             const endRefs =
-              typeof evt.data === "object" &&
-              evt.data &&
-              "references" in evt.data
+              typeof evt.data === "object" && evt.data && "references" in evt.data
                 ? normalizeReferences((evt.data as { references?: unknown }).references)
                 : [];
             const endSearchMeta =
@@ -553,9 +553,13 @@ export default function AssistantClient({ agentId }: Props) {
               "cover_image" in evt.data &&
               typeof (evt.data as { cover_image?: unknown }).cover_image === "object" &&
               (evt.data as { cover_image?: { ok?: unknown; image_path?: unknown } }).cover_image &&
-              (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } }).cover_image.ok === true &&
-              typeof (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } }).cover_image.image_path === "string"
-                ? String((evt.data as { cover_image: { image_path: string } }).cover_image.image_path)
+              (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } }).cover_image
+                .ok === true &&
+              typeof (evt.data as { cover_image: { ok?: unknown; image_path?: unknown } })
+                .cover_image.image_path === "string"
+                ? String(
+                    (evt.data as { cover_image: { image_path: string } }).cover_image.image_path,
+                  )
                 : "";
             const endCoverImageError =
               typeof evt.data === "object" &&
@@ -563,8 +567,10 @@ export default function AssistantClient({ agentId }: Props) {
               "cover_image" in evt.data &&
               typeof (evt.data as { cover_image?: unknown }).cover_image === "object" &&
               (evt.data as { cover_image?: { ok?: unknown; error?: unknown } }).cover_image &&
-              (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image.ok === false &&
-              typeof (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image.error === "string"
+              (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image.ok ===
+                false &&
+              typeof (evt.data as { cover_image: { ok?: unknown; error?: unknown } }).cover_image
+                .error === "string"
                 ? String((evt.data as { cover_image: { error: string } }).cover_image.error)
                 : "";
 
@@ -575,7 +581,13 @@ export default function AssistantClient({ agentId }: Props) {
             } else if (endCoverImageError) {
               finalContent = `${finalContent}\n\n封面图生成失败：${endCoverImageError}`;
             }
-            upsertAssistantMessage(assistantMessageId, finalContent, endRefs, endSearchMeta, endCoverImagePath || undefined);
+            upsertAssistantMessage(
+              assistantMessageId,
+              finalContent,
+              endRefs,
+              endSearchMeta,
+              endCoverImagePath || undefined,
+            );
             content = finalContent;
             lastReferences = endRefs;
             lastSearchMeta = endSearchMeta;
@@ -594,7 +606,7 @@ export default function AssistantClient({ agentId }: Props) {
   async function executeAgentRun(
     conversationForChat: Message[],
     workflowPayload: Record<string, unknown> | null,
-    signal: AbortSignal
+    signal: AbortSignal,
   ): Promise<{
     content: string;
     references: MessageReference[];
@@ -620,15 +632,13 @@ export default function AssistantClient({ agentId }: Props) {
         prompt: conversationForChat[conversationForChat.length - 1]?.content ?? "",
       },
       assistantMessageId,
-      signal
+      signal,
     );
     streamingAssistantIdRef.current = null;
     return generated;
   }
 
-  async function withInFlightAbort<T>(
-    run: (signal: AbortSignal) => Promise<T>
-  ): Promise<T | null> {
+  async function withInFlightAbort<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T | null> {
     setLoading(true);
     const controller = new AbortController();
     inFlightAbortRef.current = controller;
@@ -648,22 +658,19 @@ export default function AssistantClient({ agentId }: Props) {
                       ? m.content
                       : `${m.content.trimEnd()}\n\n已停止。`,
                   }
-                : m
-            )
+                : m,
+            ),
           );
         }
         streamingAssistantIdRef.current = null;
         return null;
       }
-      const message =
-        error instanceof Error ? error.message : "网络或服务器错误，请稍后重试。";
+      const message = error instanceof Error ? error.message : "网络或服务器错误，请稍后重试。";
       const sid = streamingAssistantIdRef.current;
       setMessages((prev) => {
         if (sid && isXHS) {
           return prev.map((m) =>
-            m.id === sid && m.role === "assistant"
-              ? { ...m, content: `错误：${message}` }
-              : m
+            m.id === sid && m.role === "assistant" ? { ...m, content: `错误：${message}` } : m,
           );
         }
         return [
@@ -695,8 +702,7 @@ export default function AssistantClient({ agentId }: Props) {
         await loadSessionMessages(uid);
       } catch (error) {
         if (cancelled) return;
-        const message =
-          error instanceof Error ? error.message : "会话恢复失败，请稍后重试。";
+        const message = error instanceof Error ? error.message : "会话恢复失败，请稍后重试。";
         setMessages([
           {
             id: createClientId(),
@@ -787,8 +793,8 @@ export default function AssistantClient({ agentId }: Props) {
           },
         ],
         workflowPayload,
-        signal
-      )
+        signal,
+      ),
     );
     if (!generated || !conversationId) return;
     try {
@@ -845,9 +851,7 @@ export default function AssistantClient({ agentId }: Props) {
     flushSync(() => {
       setMessages(truncated);
     });
-    await withInFlightAbort((signal) =>
-      executeAgentRun(truncated, workflowPayload, signal)
-    );
+    await withInFlightAbort((signal) => executeAgentRun(truncated, workflowPayload, signal));
   }
 
   function stopInFlight() {
@@ -857,12 +861,8 @@ export default function AssistantClient({ agentId }: Props) {
   const shellGradient = `bg-gradient-to-b ${ui.shellFrom} ${ui.shellTo} ${ui.shellFromDark} ${ui.shellToDark}`;
 
   return (
-    <div
-      className={`h-dvh min-h-0 overflow-hidden ${shellGradient} flex flex-col`}
-    >
-      <header
-        className={`shrink-0 border-b z-10 ${ui.headerBorder} ${ui.headerBg} backdrop-blur`}
-      >
+    <div className={`h-dvh min-h-0 overflow-hidden ${shellGradient} flex flex-col`}>
+      <header className={`shrink-0 border-b z-10 ${ui.headerBorder} ${ui.headerBg} backdrop-blur`}>
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
           <Link
             href="/"
@@ -873,7 +873,7 @@ export default function AssistantClient({ agentId }: Props) {
           <p
             className={`flex-1 min-w-0 text-center text-sm sm:text-base font-semibold leading-snug ${ui.titleText}`}
           >
-           {ui.badge.replace(/^任务[：:]\s*/, "")}
+            {ui.badge.replace(/^任务[：:]\s*/, "")}
           </p>
           <div className="w-32 shrink-0">
             <Select
@@ -917,12 +917,8 @@ export default function AssistantClient({ agentId }: Props) {
                   {ui.emptyEmoji}
                 </span>
               </div>
-              <p className="text-slate-600 dark:text-slate-300 mb-1 font-medium">
-                {ui.emptyTitle}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-                {ui.emptyHint}
-              </p>
+              <p className="text-slate-600 dark:text-slate-300 mb-1 font-medium">{ui.emptyTitle}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">{ui.emptyHint}</p>
             </div>
           ) : (
             <AssistantMessageList
@@ -931,7 +927,7 @@ export default function AssistantClient({ agentId }: Props) {
               copiedMessageId={copiedMessageId}
               userBubbleClass={ui.userBubble}
               onCopy={(msg) => void copyMessageCard(msg)}
-            onQuote={(msg) => setQuotedMessage(msg)}
+              onQuote={(msg) => setQuotedMessage(msg)}
               onEdit={(msg) => {
                 setInput(msg.content);
                 setQuotedMessage(null);

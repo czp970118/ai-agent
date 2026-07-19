@@ -8,20 +8,9 @@ import {
   type QuestionBankItem,
 } from "@/app/admin/question-bank/questionBankClient";
 import { formatRealExamSummary } from "@/app/admin/question-bank/realExam";
-import {
-  formatAnswerDisplay,
-  optionsToText,
-  quizQuestionCardStem,
-} from "./dailyQuizHelpers";
-import {
-  mergeSlotsWithRefQuestionIds,
-  parseDailyQuizBody,
-} from "./parseDailyQuizBody";
-import {
-  CreativeWork,
-  getWork,
-  PLATFORM_META,
-} from "../workStorage";
+import { formatAnswerDisplay, optionsToText, quizQuestionCardStem } from "./dailyQuizHelpers";
+import { mergeSlotsWithRefQuestionIds, parseDailyQuizBody } from "./parseDailyQuizBody";
+import { CreativeWork, getWork, PLATFORM_META } from "../workStorage";
 
 function formatTime(ms: number | undefined): string {
   if (!ms || !Number.isFinite(ms)) return "—";
@@ -63,10 +52,7 @@ export default function DailyQuizWorkDetailClient() {
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const parsed = useMemo(
-    () => parseDailyQuizBody(work?.body ?? ""),
-    [work?.body],
-  );
+  const parsed = useMemo(() => parseDailyQuizBody(work?.body ?? ""), [work?.body]);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,14 +69,8 @@ export default function DailyQuizWorkDetailClient() {
           return;
         }
         setWork(w);
-        const refPaths = [
-          w.coverPath ?? "",
-          ...(w.coverRefUrls ?? []),
-        ];
-        const bodySlots = mergeSlotsWithRefQuestionIds(
-          parseDailyQuizBody(w.body).slots,
-          refPaths,
-        );
+        const refPaths = [w.coverPath ?? "", ...(w.coverRefUrls ?? [])];
+        const bodySlots = mergeSlotsWithRefQuestionIds(parseDailyQuizBody(w.body).slots, refPaths);
         const initial: SlotView[] = bodySlots.map((s) => ({
           index: s.index,
           questionId: s.questionId,
@@ -118,9 +98,7 @@ export default function DailyQuizWorkDetailClient() {
               if (cancelled) return;
               const msg = e instanceof Error ? e.message : "题目加载失败";
               setSlots((prev) =>
-                prev.map((row, idx) =>
-                  idx === i ? { ...row, loadError: msg } : row,
-                ),
+                prev.map((row, idx) => (idx === i ? { ...row, loadError: msg } : row)),
               );
             }
           }),
@@ -199,9 +177,7 @@ export default function DailyQuizWorkDetailClient() {
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">
-          引用题目
-        </h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">引用题目</h2>
         {slots.length === 0 ? (
           <p className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-800">
             未解析到题目内容
@@ -221,7 +197,9 @@ export default function DailyQuizWorkDetailClient() {
                 </p>
 
                 {slot.loadError ? (
-                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">{slot.loadError}</p>
+                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                    {slot.loadError}
+                  </p>
                 ) : null}
 
                 {slot.question ? (

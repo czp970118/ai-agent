@@ -15,10 +15,7 @@ function loadEnvCompose(): void {
     const key = t.slice(0, eq).trim();
     if (!key) continue;
     let val = t.slice(eq + 1).trim();
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
     }
     if (process.env[key] === undefined) process.env[key] = val;

@@ -16,17 +16,13 @@ const AGENT_SYSTEM_PROMPTS: Record<AgentId, string> = {
   ].join(""),
 };
 
-const DEFAULT_SYSTEM =
-  "你是一个友好、专业的 AI 智能助手，用中文回答用户问题。回答要清晰、有条理。";
+const DEFAULT_SYSTEM = "你是一个友好、专业的 AI 智能助手，用中文回答用户问题。回答要清晰、有条理。";
 
 export async function POST(request: NextRequest) {
   try {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "请设置环境变量 DEEPSEEK_API_KEY" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "请设置环境变量 DEEPSEEK_API_KEY" }, { status: 500 });
     }
 
     const body = await request.json();
@@ -36,17 +32,11 @@ export async function POST(request: NextRequest) {
     };
 
     if (!messages?.length) {
-      return NextResponse.json(
-        { error: "请提供 messages 数组" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "请提供 messages 数组" }, { status: 400 });
     }
 
-    const agent: AgentId | undefined =
-      agentRaw && isAgentId(agentRaw) ? agentRaw : undefined;
-    const systemContent = agent
-      ? AGENT_SYSTEM_PROMPTS[agent]
-      : DEFAULT_SYSTEM;
+    const agent: AgentId | undefined = agentRaw && isAgentId(agentRaw) ? agentRaw : undefined;
+    const systemContent = agent ? AGENT_SYSTEM_PROMPTS[agent] : DEFAULT_SYSTEM;
 
     const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 
@@ -74,7 +64,7 @@ export async function POST(request: NextRequest) {
       console.error("DeepSeek API 错误:", response.status, err);
       return NextResponse.json(
         { error: `AI 服务请求失败: ${response.status}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -82,8 +72,7 @@ export async function POST(request: NextRequest) {
       choices?: Array<{ message?: { content?: string } }>;
     };
 
-    const content =
-      data.choices?.[0]?.message?.content ?? "抱歉，没有收到有效回复。";
+    const content = data.choices?.[0]?.message?.content ?? "抱歉，没有收到有效回复。";
 
     return NextResponse.json({ content });
   } catch (e) {

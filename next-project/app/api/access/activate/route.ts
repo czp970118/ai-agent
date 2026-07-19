@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  ACCESS_GATE_COOKIE,
-  cookieOptions,
-  signAccessJwt,
-} from "@/lib/accessGate";
+import { ACCESS_GATE_COOKIE, cookieOptions, signAccessJwt } from "@/lib/accessGate";
 
 /** 重定向用站点根：优先 SITE_ORIGIN（与邮件里公网一致），避免 req.url 在错误 Host（如 0.0.0.0）下拼错。 */
 function siteRoot(req: NextRequest): string {
