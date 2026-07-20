@@ -173,55 +173,6 @@ def create_category(*, user_id: str, agent: str, name: str, sort_order: int | No
     }
 
 
-def update_category(
-    *,
-    user_id: str,
-    category_id: str,
-    name: str | None = None,
-    sort_order: int | None = None,
-) -> dict[str, Any]:
-    aid, old_domain = _decode_category_id(category_id)
-    new_domain = _clamp_name(name) if name is not None else old_domain
-    if new_domain == old_domain and sort_order is None:
-        raise ValueError("没有可更新字段")
-    now = utc_now_iso()
-    with _connect() as conn:
-        try:
-            cur = conn.execute(
-                """
-                UPDATE prompt_templates
-                SET domain = ?, updated_at = ?
-                WHERE agent = ? AND domain = ?
-                """,
-                (new_domain, now, aid, old_domain),
-            )
-            if cur.rowcount < 1:
-                raise ValueError("分类不存在")
-        except sqlite3.IntegrityError as exc:
-            raise ValueError("分类名称已存在") from exc
-        conn.commit()
-    return {
-        "id": _encode_category_id(aid, new_domain),
-        "agent": aid,
-        "name": new_domain,
-        "sort_order": 0 if sort_order is None else int(sort_order),
-        "created_at": now,
-        "updated_at": now,
-    }
-
-
-def delete_category(*, user_id: str, category_id: str) -> None:
-    aid, domain = _decode_category_id(category_id)
-    with _connect() as conn:
-        cur = conn.execute(
-            "DELETE FROM prompt_templates WHERE agent = ? AND domain = ?",
-            (aid, domain),
-        )
-        conn.commit()
-        if cur.rowcount < 1:
-            raise ValueError("分类不存在")
-
-
 def create_style(
     *,
     user_id: str,

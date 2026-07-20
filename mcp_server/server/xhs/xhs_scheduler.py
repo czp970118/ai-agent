@@ -14,8 +14,6 @@ from .xhs_scheduler_state import (
 )
 from .xhs_task_store import (
     claim_due_pending_task,
-    get_task,
-    mark_task_slot_running,
     update_task_slot_result,
 )
 
@@ -86,29 +84,6 @@ class XhsSchedulerService:
         except asyncio.CancelledError:
             pass
         logger.info("xhs_scheduler_stopped")
-
-    async def run_task_now(self, task_id: str) -> dict[str, Any]:
-        task = get_task(task_id)
-        if task is None:
-            raise ValueError("task not found")
-        if str(task.get("status") or "") == "FAILED" and str(task.get("error_message") or "") == "cancelled by user":
-            raise ValueError("task cancelled")
-        slot_results = task.get("slot_results") if isinstance(task.get("slot_results"), dict) else {}
-        fetch_count = int(task.get("fetch_count") or 0)
-        target_index = -1
-        for idx in range(fetch_count):
-            state = str(slot_results.get(str(idx)) or "")
-            if state not in ("SUCCESS", "FAILED", "RUNNING"):
-                target_index = idx
-                break
-        if target_index < 0:
-            raise ValueError("no runnable slot")
-        updated = mark_task_slot_running(str(task.get("task_id") or ""), target_index)
-        if updated is None:
-            raise ValueError("task not found")
-        await self._run_task_instance_slot(updated, target_index)
-        latest = get_task(str(task.get("task_id") or ""))
-        return latest or updated
 
     async def _run_task_instance_slot(self, task: dict[str, Any], index: int) -> None:
         async with self._lock:

@@ -23,14 +23,11 @@ from .daily_quiz_publish import publish_daily_quiz
 from .extract import combine_volume_texts, extract_document_bytes, normalize_extension, validate_extracted_text
 from .import_config import allowed_upload_extensions, upload_config_payload
 from .import_store import (
-    batch_update_selected,
     create_import_record,
     delete_import_items,
     file_sha256,
     get_import,
     insert_import_items,
-    list_import_items,
-    list_recent_imports,
     patch_import_item,
     update_import_status,
 )
@@ -131,10 +128,6 @@ class ImportItemPatch(BaseModel):
     subjectDomain: str | None = Field(default=None, alias="subject_domain")
     questionType: str | None = None
     selected: bool | None = None
-
-
-class BatchSelectedPatch(BaseModel):
-    selections: dict[str, bool] = Field(default_factory=dict)
 
 
 class ConfirmImportBody(BaseModel):
@@ -278,10 +271,6 @@ def register_question_routes(router: APIRouter) -> None:
     @router.get("/questions/import/config")
     async def get_questions_import_config() -> dict[str, Any]:
         return {"ok": True, **upload_config_payload(max_upload_bytes=max_upload_bytes())}
-
-    @router.get("/questions/import")
-    async def get_questions_import_list(limit: int = 20) -> dict[str, Any]:
-        return {"ok": True, "imports": list_recent_imports(limit=limit)}
 
     async def _validate_upload_file(upload: UploadFile) -> tuple[bytes, str, str]:
         raw_name = str(upload.filename or "").strip()
@@ -511,22 +500,6 @@ def register_question_routes(router: APIRouter) -> None:
         delete_import_items(import_id)
         return await _run_parse_pipeline(import_id, text, cat)
 
-    @router.get("/questions/import/{import_id}")
-    async def get_questions_import(import_id: str) -> dict[str, Any]:
-        try:
-            imp = get_import(import_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return {"ok": True, "import": imp}
-
-    @router.get("/questions/import/{import_id}/items")
-    async def get_questions_import_items(import_id: str) -> dict[str, Any]:
-        try:
-            get_import(import_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return {"ok": True, "items": list_import_items(import_id)}
-
     @router.patch("/questions/import/{import_id}/items/{item_id}")
     async def patch_questions_import_item(
         import_id: str,
@@ -542,17 +515,6 @@ def register_question_routes(router: APIRouter) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"ok": True, "item": item}
-
-    @router.patch("/questions/import/{import_id}/items")
-    async def patch_questions_import_items_batch(
-        import_id: str,
-        body: BatchSelectedPatch,
-    ) -> dict[str, Any]:
-        imp = get_import(import_id)
-        if imp["status"] not in ("parsed", "parse_failed"):
-            raise HTTPException(status_code=400, detail="当前批次不可更新勾选")
-        items = batch_update_selected(import_id, body.selections)
-        return {"ok": True, "items": items}
 
     @router.post("/questions/import/{import_id}/confirm")
     async def post_questions_import_confirm(
@@ -587,21 +549,6 @@ def register_question_routes(router: APIRouter) -> None:
         text, cat = await _load_import_text(import_id)
         delete_import_items(import_id)
         return await _run_parse_pipeline(import_id, text, cat)
-
-    @router.post("/questions/import/{import_id}/discard")
-    async def post_questions_import_discard(import_id: str) -> dict[str, Any]:
-        imp = get_import(import_id)
-        if imp["status"] == "confirmed":
-            raise HTTPException(status_code=400, detail="已入库批次不可放弃")
-        from ..chat.chat_memory_db import utc_now_iso
-
-        update_import_status(
-            import_id,
-            status="discarded",
-            discarded_at=utc_now_iso(),
-        )
-        delete_import_items(import_id)
-        return {"ok": True, "import": get_import(import_id)}
 
     @router.get("/questions")
     async def get_questions_bank(

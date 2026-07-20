@@ -96,22 +96,3 @@ def load_scheduler_config() -> dict[str, Any]:
     }
 
 
-def save_scheduler_config(config: dict[str, Any]) -> dict[str, Any]:
-    current = load_scheduler_config()
-    merged = {**current, **(config if isinstance(config, dict) else {})}
-    merged["source"] = str(merged.get("source") or "xhs").strip() or "xhs"
-    merged["per_query_page_size"] = max(1, min(int(merged.get("per_query_page_size") or 20), 100))
-    merged["combo_repeat_min"] = max(1, min(int(merged.get("combo_repeat_min") or 2), 10))
-    merged["combo_repeat_max"] = max(
-        merged["combo_repeat_min"],
-        min(int(merged.get("combo_repeat_max") or 3), 20),
-    )
-    merged["topic_batch_size"] = max(1, min(int(merged.get("topic_batch_size") or 2), 20))
-    merged["enabled"] = bool(merged.get("enabled"))
-    merged["email_enabled"] = bool(merged.get("email_enabled"))
-    _STORE.save_state(merged, key="config")
-    return merged
-
-
-def list_recent_scheduler_runs(limit: int = 20) -> list[dict[str, Any]]:
-    return _STORE.list_recent_runs(limit=limit)

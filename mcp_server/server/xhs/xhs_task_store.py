@@ -317,23 +317,3 @@ def update_task_slot_result(task_id: str, index: int, ok: bool, error_message: s
         )
         conn.commit()
     return get_task(task_id)
-
-
-def mark_task_slot_running(task_id: str, index: int) -> dict[str, Any] | None:
-    task = get_task(task_id)
-    if task is None:
-        return None
-    slot_results = task.get("slot_results") if isinstance(task.get("slot_results"), dict) else {}
-    value = str(slot_results.get(str(index)) or "")
-    if value in ("SUCCESS", "FAILED", "RUNNING"):
-        return task
-    slot_results[str(index)] = "RUNNING"
-    now = _utc_now_iso()
-    with _conn() as conn:
-        _init_task_table(conn)
-        conn.execute(
-            "UPDATE xhs_schedule_tasks SET slot_results_json=?, updated_at=? WHERE task_id=?",
-            (json.dumps(slot_results, ensure_ascii=False), now, task_id),
-        )
-        conn.commit()
-    return get_task(task_id)

@@ -43,12 +43,10 @@ from ..questions.routes import register_question_routes
 from .prompt_library_store import (
     create_category,
     create_style,
-    delete_category,
     delete_style,
     fetch_style_body,
     get_prompt_template_domain,
     list_prompt_library,
-    update_category,
     update_style,
 )
 
@@ -91,11 +89,6 @@ class AppendConversationMessagesRequest(BaseModel):
 class PromptCategoryCreate(BaseModel):
     agent: str
     name: str
-    sort_order: int | None = None
-
-
-class PromptCategoryPatch(BaseModel):
-    name: str | None = None
     sort_order: int | None = None
 
 
@@ -858,30 +851,6 @@ async def post_prompt_library_category(body: PromptCategoryCreate) -> dict[str, 
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@chat_router.patch("/prompt-library/categories/{category_id}")
-async def patch_prompt_library_category(category_id: str, body: PromptCategoryPatch) -> dict[str, Any]:
-    try:
-        return update_category(
-            user_id="__global__",
-            category_id=category_id,
-            name=body.name,
-            sort_order=body.sort_order,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@chat_router.delete("/prompt-library/categories/{category_id}")
-async def delete_prompt_library_category(
-    category_id: str,
-) -> dict[str, Any]:
-    try:
-        delete_category(user_id="__global__", category_id=category_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ok": True}
 
 
 @chat_router.post("/prompt-library/styles")

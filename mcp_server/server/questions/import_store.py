@@ -354,30 +354,7 @@ def patch_import_item(
     return get_import_item(iid, it)
 
 
-def batch_update_selected(import_id: str, selections: dict[str, bool]) -> list[dict[str, Any]]:
-    iid = str(import_id or "").strip()
-    with _connect() as conn:
-        for item_id, sel in selections.items():
-            conn.execute(
-                "UPDATE question_import_items SET selected = ? WHERE import_id = ? AND id = ?",
-                (1 if sel else 0, iid, str(item_id)),
-            )
-        conn.commit()
-    return list_import_items(iid)
-
-
 def file_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def list_recent_imports(limit: int = 20) -> list[dict[str, Any]]:
-    with _connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM question_imports
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (max(1, min(limit, 100)),),
-        ).fetchall()
-    return [_import_row_to_dict(r) for r in rows]
