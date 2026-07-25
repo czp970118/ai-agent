@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const agent: AgentId | undefined = agentRaw && isAgentId(agentRaw) ? agentRaw : undefined;
     const systemContent = agent ? AGENT_SYSTEM_PROMPTS[agent] : DEFAULT_SYSTEM;
 
-    const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+    const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
 
     const response = await fetch(DEEPSEEK_CHAT_URL, {
       method: "POST",

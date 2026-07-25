@@ -63,7 +63,7 @@ mcp_server/
 在仓库根 `mcp_server/.env` 中配置（勿提交 git），核心项如下：
 
 - `DEEPSEEK_API_KEY`：必填，`/chat/stream` 依赖
-- `DEEPSEEK_MODEL`：可选，默认 `deepseek-chat`
+- `DEEPSEEK_MODEL`：可选，默认 `deepseek-v4-flash`
 - `XHS_STORAGE_STATE`：可选，默认 `server/xhs/xhs_storage_state.json`
 - `QCC_STORAGE_STATE`：可选，默认 `server/qcc/qcc_storage_state.json`
 

@@ -214,7 +214,7 @@ async def _run_parse_pipeline(import_id: str, text: str, category: str) -> dict[
         )
         raise HTTPException(status_code=500, detail="缺少环境变量 DEEPSEEK_API_KEY")
 
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
     update_import_status(import_id, status="parsing")
 
     result = await parse_questions_from_text(

@@ -537,7 +537,7 @@ async def post_chat_stream(body: ChatStreamRequest) -> StreamingResponse:
             yield _sse("end", {"ok": False})
         return StreamingResponse(missing_key_stream(), media_type="text/event-stream")
 
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
     async def event_stream():
         trace_id = uuid4().hex[:12]

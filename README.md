@@ -101,7 +101,7 @@ Next 容器读取 **`next-project/env.compose`**；Compose 内 MCP 服务名为 
 | 变量 | 作用 |
 |------|------|
 | `DEEPSEEK_API_KEY` | `/chat/stream` 所需 |
-| `DEEPSEEK_MODEL` | 可选，默认 `deepseek-chat` |
+| `DEEPSEEK_MODEL` | 可选，默认 `deepseek-v4-flash` |
 | `PUBLIC_SITE_ORIGIN` | 邮件与对外链接使用的站点根 |
 | `ACCESS_GATE_*` | 门禁：管理员邮箱、HMAC 密钥、MCP 对外 origin 等 |
 | `DASHSCOPE_API_KEY` | 小红书 agent 封面图 workflow 等能力 |
